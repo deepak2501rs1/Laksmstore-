@@ -1,0 +1,3165 @@
+import React, { useState, useEffect, useContext, createContext, useRef, useCallback, useMemo } from 'react';
+
+// ==========================================
+// SECTION 1: DATA LAYER & UTILS
+// ==========================================
+
+const store = {
+  get: (key, defaultValue) => {
+    try {
+      const item = localStorage.getItem(key);
+      return item ? JSON.parse(item) : defaultValue;
+    } catch (error) {
+      console.error(`Error reading ${key} from localStorage`, error);
+      return defaultValue;
+    }
+  },
+  set: (key, value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.error(`Error saving ${key} to localStorage`, error);
+    }
+  },
+  remove: (key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.error(`Error removing ${key} from localStorage`, error);
+    }
+  }
+};
+
+const generateId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+const formatDate = (isoString) => {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  return date.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
+const formatPrice = (number) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(number);
+};
+
+const sanitizeInput = (str) => {
+  if (!str) return '';
+  return str.replace(/[<>]/g, '').trim();
+};
+
+// ==========================================
+// SECTION 2: DEFAULT DATA
+// ==========================================
+
+const defaultSettings = {
+  shopName: "Laksm Store",
+  tagline: "Premium Indian Crafts & Goods",
+  ownerName: "Deepak",
+  whatsappNumber: "919876543210",
+  chatWelcomeMessage: "Namaste! 🙏 Kya main aapki koi madad kar sakta hu?",
+  whatsappEnabled: true,
+  whatsappButtonLabel: "Recommended! Best Deal 🤝",
+  whatsappHomeLabel: "💬 Recommended – Chat with us!",
+  adminUsername: "deepak_admin",
+  adminPassword: "Deepak@2025",
+  logoUrl: "",
+  heroTitle: "Premium Indian Crafts",
+  heroSubtitle: "Authentic • Handcrafted • Quality Guaranteed",
+  trustBadges: ["💵 Cash on Delivery", "🚚 Free Delivery", "🔒 Secure Payment", "🇮🇳 Made in India"],
+  freeDeliveryThreshold: 999,
+  showMadeBy: true,
+  storeClosed: false,
+  storeClosedMessage: "Store is temporarily closed. Please check back later.",
+  emailDomain: "",
+  allowedEmailDomains: [],
+  requireEmailVerification: false,
+  maxOrdersPerUser: 50,
+  currency: "₹",
+  version: "1.0.0"
+};
+
+const defaultProducts = [
+  {
+    id: "p_101",
+    name: "Premium Brass Kuber Diya Set",
+    shortDescription: "Handcrafted pure brass diyas for daily pooja.",
+    description: "Bring auspicious light to your home with this meticulously handcrafted pure brass Kuber Diya set. Perfect for daily pooja, Diwali, and spiritual gifting. Heavy weight and easy to clean.",
+    price: 899,
+    originalPrice: 1299,
+    images: ["https://images.unsplash.com/photo-1605806616949-1e87b487cb2a?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1596438459194-f284581f14c2?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1603048297172-c92544798d5e?auto=format&fit=crop&q=80&w=800"],
+    category: "Pooja Items",
+    tags: ["Brass", "Pooja", "Diwali"],
+    freeDelivery: true,
+    cod: true,
+    stock: 50,
+    sold: 215,
+    rating: 4.8,
+    reviewCount: 342, // Now ignored, using dynamic
+    featured: true,
+    active: true,
+    isPremium: true, // Rainbow 3D Effect On
+    sevenDayReplace: true, // Highlight 7 days replacement
+    onlineDiscount: 50, // Rs 50 off on online payment
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: "p_102",
+    name: "Banarasi Silk Blend Dupatta",
+    shortDescription: "Elegant zari work dupatta for festive wear.",
+    description: "Add a touch of royal elegance to any outfit with this exquisite Banarasi silk blend dupatta. Features intricate zari woven motifs and rich tassels. Dry clean only.",
+    price: 1499,
+    originalPrice: 2499,
+    images: ["https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1583391733959-f183063e9c7a?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&q=80&w=800"],
+    category: "Clothing",
+    tags: ["Silk", "Dupatta", "Festive"],
+    freeDelivery: true,
+    cod: true,
+    stock: 20,
+    sold: 89,
+    rating: 4.6,
+    reviewCount: 128,
+    featured: true,
+    active: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: "p_103",
+    name: "Organic Herbal Gulal Set (4 Colors)",
+    shortDescription: "100% natural, skin-safe colors for Holi.",
+    description: "Celebrate safely with our organic herbal gulal made from flower petals, turmeric, and natural extracts. Non-toxic, eco-friendly, and washes off easily. Set includes Red, Yellow, Green, and Pink.",
+    price: 450,
+    originalPrice: 600,
+    images: ["https://images.unsplash.com/photo-1551893478-d726eaf0442c?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1519638399535-1b036603ac77?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1521997888043-aa9c9706d0b2?auto=format&fit=crop&q=80&w=800"],
+    category: "Festival",
+    tags: ["Organic", "Holi", "Colors"],
+    freeDelivery: false,
+    cod: true,
+    stock: 150,
+    sold: 430,
+    rating: 4.9,
+    reviewCount: 512,
+    featured: false,
+    active: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: "p_104",
+    name: "Hand-Embroidered Chikankari Kurta",
+    shortDescription: "Authentic Lucknowi threadwork pure cotton kurta.",
+    description: "Experience the timeless beauty of authentic Lucknowi Chikankari. Hand-embroidered by expert artisans on premium breathable cotton. Perfect for summer and festive occasions.",
+    price: 1850,
+    originalPrice: 2800,
+    images: ["https://images.unsplash.com/photo-1583391265517-35bbdad01209?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1596455607563-ad6193f76b17?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1583391733975-f9353982e043?auto=format&fit=crop&q=80&w=800"],
+    category: "Clothing",
+    tags: ["Cotton", "Kurta", "Handmade"],
+    freeDelivery: true,
+    cod: true,
+    stock: 35,
+    sold: 112,
+    rating: 4.7,
+    reviewCount: 89,
+    featured: true,
+    active: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: "p_105",
+    name: "Mysore Sandalwood Soap Set",
+    shortDescription: "Luxury bathing bars with pure sandalwood oil.",
+    description: "Indulge in a royal bathing experience with our premium sandalwood soaps. Enriched with pure sandalwood oil and natural moisturisers. Box contains 4 luxury bars.",
+    price: 599,
+    originalPrice: 750,
+    images: ["https://images.unsplash.com/photo-1600857062241-98e5eba2ce32?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1584824486516-0555a07fc511?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1600857544200-b2f666a9a2ec?auto=format&fit=crop&q=80&w=800"],
+    category: "Organic",
+    tags: ["Soap", "Sandalwood", "Beauty"],
+    freeDelivery: false,
+    cod: false,
+    stock: 80,
+    sold: 340,
+    rating: 4.5,
+    reviewCount: 215,
+    featured: false,
+    active: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: "p_106",
+    name: "Grandma's Mango & Lemon Pickle Duo",
+    shortDescription: "Traditional sun-dried handmade Indian pickles.",
+    description: "Taste the nostalgia with our signature pickle set. Made using traditional family recipes, cold-pressed mustard oil, and hand-ground spices. No artificial preservatives. 250g each.",
+    price: 399,
+    originalPrice: 499,
+    images: ["https://images.unsplash.com/photo-1588674992955-46eb988c5240?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1626200419189-3b58941785ae?auto=format&fit=crop&q=80&w=800", "https://images.unsplash.com/photo-1589134709403-166299b05423?auto=format&fit=crop&q=80&w=800"],
+    category: "Handmade",
+    tags: ["Food", "Pickle", "Traditional"],
+    freeDelivery: false,
+    cod: true,
+    stock: 100,
+    sold: 560,
+    rating: 4.9,
+    reviewCount: 845,
+    featured: true,
+    active: true,
+    isPremium: false,
+    onlineDiscount: 30,
+    createdAt: new Date().toISOString()
+  }
+];
+
+// ==========================================
+// SECTION 3: INDIA LOCATION DATABASE
+// ==========================================
+const INDIA_CITIES = {
+  "Andhra Pradesh": ["Visakhapatnam", "Vijayawada", "Guntur", "Nellore", "Kurnool", "Rajahmundry", "Kakinada", "Tirupati", "Anantapur", "Kadapa", "Vizianagaram", "Eluru", "Ongole", "Nandyal", "Machilipatnam", "Adoni", "Tenali", "Chittoor", "Hindupur", "Proddatur"],
+  "Arunachal Pradesh": ["Itanagar", "Naharlagun", "Pasighat", "Namsai", "Roing", "Ziro", "Tezu", "Bomdila", "Tawang", "Changlang"],
+  "Assam": ["Guwahati", "Silchar", "Dibrugarh", "Jorhat", "Nagaon", "Tinsukia", "Tezpur", "Bongaigaon", "Karimganj", "Dhubri", "Diphu", "North Lakhimpur", "Lumbding", "Goalpara", "Sivasagar"],
+  "Bihar": ["Patna", "Gaya", "Bhagalpur", "Muzaffarpur", "Darbhanga", "Purnia", "Arrah", "Begusarai", "Katihar", "Munger", "Chhapra", "Danapur", "Saharsa", "Hajipur", "Sasaram", "Dehri", "Siwan", "Motihari", "Nawada", "Bagaha"],
+  "Chhattisgarh": ["Raipur", "Bhilai", "Bilaspur", "Korba", "Rajnandgaon", "Raigarh", "Jagdalpur", "Ambikapur", "Chirmiri", "Dhamtari", "Mahasamund", "Bhatapara", "Kanker", "Durg"],
+  "Goa": ["Panaji", "Margao", "Vasco da Gama", "Mapusa", "Ponda", "Bicholim", "Curchorem", "Sanquelim", "Cuncolim", "Valpoi"],
+  "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot", "Bhavnagar", "Jamnagar", "Gandhinagar", "Anand", "Navsari", "Morbi", "Nadiad", "Surendranagar", "Bharuch", "Mehsana", "Bhuj", "Porbandar", "Palanpur", "Valsad", "Vapi", "Gondal"],
+  "Haryana": ["Faridabad", "Gurugram", "Panipat", "Ambala", "Yamunanagar", "Rohtak", "Hisar", "Karnal", "Sonipat", "Panchkula", "Bhiwani", "Sirsa", "Bahadurgarh", "Jind", "Thanesar", "Kaithal", "Rewari", "Palwal", "Hansi", "Narnaul"],
+  "Himachal Pradesh": ["Shimla", "Dharamsala", "Solan", "Mandi", "Kullu", "Palampur", "Baddi", "Nahan", "Una", "Bilaspur", "Chamba", "Hamirpur"],
+  "Jharkhand": ["Ranchi", "Jamshedpur", "Dhanbad", "Bokaro", "Deoghar", "Phusro", "Hazaribagh", "Giridih", "Ramgarh", "Medininagar", "Chirkunda", "Jhumri Telaiya", "Sahibganj", "Chaibasa", "Lohardaga"],
+  "Karnataka": ["Bengaluru", "Mysuru", "Hubballi", "Mangaluru", "Belagavi", "Kalaburagi", "Ballari", "Vijayapura", "Tumkur", "Shivamogga", "Raichur", "Bidar", "Hosapete", "Gadag", "Hassan", "Udupi", "Davanagere", "Chitradurga", "Kolar", "Mandya"],
+  "Kerala": ["Thiruvananthapuram", "Kochi", "Kozhikode", "Thrissur", "Kollam", "Palakkad", "Alappuzha", "Malappuram", "Kannur", "Kottayam", "Manjeri", "Thalassery", "Ponnani", "Vatakara", "Kanhangad", "Payyanur", "Koyilandy", "Parappanangadi", "Neyyattinkara", "Shoranur"],
+  "Madhya Pradesh": ["Bhopal", "Indore", "Jabalpur", "Gwalior", "Ujjain", "Sagar", "Dewas", "Satna", "Ratlam", "Rewa", "Murwara", "Singrauli", "Burhanpur", "Khandwa", "Bhind", "Chhindwara", "Guna", "Shivpuri", "Vidisha", "Chhatarpur"],
+  "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Thane", "Nashik", "Aurangabad", "Solapur", "Amravati", "Navi Mumbai", "Kolhapur", "Sangli", "Jalgaon", "Akola", "Latur", "Dhule", "Ahmednagar", "Chandrapur", "Parbhani", "Jalna", "Bhusawal"],
+  "Manipur": ["Imphal", "Thoubal", "Bishnupur", "Churachandpur", "Kakching", "Ukhrul", "Senapati", "Jiribam", "Tamenglong", "Khangabok"],
+  "Meghalaya": ["Shillong", "Tura", "Jowai", "Nongstoin", "Williamnagar", "Baghmara", "Resubelpara", "Mairang", "Khliehriat", "Ampati"],
+  "Mizoram": ["Aizawl", "Lunglei", "Champhai", "Serchhip", "Kolasib", "Lawngtlai", "Siaha", "Hnahthial", "Khawzawl", "Saitual"],
+  "Nagaland": ["Kohima", "Dimapur", "Mokokchung", "Wokha", "Tuensang", "Zunheboto", "Kiphire", "Phek", "Mon", "Peren"],
+  "Odisha": ["Bhubaneswar", "Cuttack", "Rourkela", "Brahmapur", "Sambalpur", "Puri", "Balasore", "Bhadrak", "Baripada", "Jharsuguda", "Jeypore", "Bargarh", "Rayagada", "Bhawanipatna", "Dhenkanal"],
+  "Punjab": ["Ludhiana", "Amritsar", "Jalandhar", "Patiala", "Bathinda", "Mohali", "Pathankot", "Hoshiarpur", "Batala", "Moga", "Abohar", "Malerkotla", "Khanna", "Phagwara", "Muktsar", "Rajpura", "Firozpur", "Kapurthala", "Sunam", "Faridkot"],
+  "Rajasthan": ["Jaipur", "Jodhpur", "Kota", "Bikaner", "Ajmer", "Udaipur", "Bhilwara", "Alwar", "Bharatpur", "Sikar", "Sri Ganganagar", "Pali", "Barmer", "Jhunjhunu", "Tonk", "Churu", "Sawai Madhopur", "Nagaur", "Makrana", "Banswara"],
+  "Sikkim": ["Gangtok", "Namchi", "Mangan", "Gyalshing", "Singtam", "Rangpo", "Jorethang", "Melli", "Rhenock", "Pakyong"],
+  "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Tiruchirappalli", "Salem", "Tirunelveli", "Erode", "Vellore", "Thoothukudi", "Dindigul", "Thanjavur", "Ranipet", "Sivakasi", "Karur", "Ooty", "Hosur", "Nagercoil", "Kanchipuram", "Kumarapalayam", "Karaikudi"],
+  "Telangana": ["Hyderabad", "Warangal", "Nizamabad", "Khammam", "Karimnagar", "Ramagundam", "Mahabubnagar", "Nalgonda", "Adilabad", "Suryapet", "Miryalaguda", "Jagtial", "Mancherial", "Kothagudem", "Bodhan", "Palwancha", "Siddipet", "Kamareddy", "Zaheerabad", "Wanaparthy"],
+  "Tripura": ["Agartala", "Udaipur", "Dharmanagar", "Kailashahar", "Belonia", "Khowai", "Bishalgarh", "Ambassa", "Sonamura", "Melaghar"],
+  "Uttar Pradesh": ["Lucknow", "Kanpur", "Ghaziabad", "Agra", "Varanasi", "Meerut", "Prayagraj", "Bareilly", "Aligarh", "Moradabad", "Saharanpur", "Gorakhpur", "Noida", "Firozabad", "Mathura", "Muzaffarnagar", "Budaun", "Rampur", "Shahjahanpur", "Jhansi"],
+  "Uttarakhand": ["Dehradun", "Haridwar", "Roorkee", "Haldwani", "Rudrapur", "Kashipur", "Rishikesh", "Kotdwar", "Srinagar", "Pithoragarh", "Manglaur", "Ramnagar", "Mussoorie", "Tehri", "Almora"],
+  "West Bengal": ["Kolkata", "Asansol", "Siliguri", "Durgapur", "Bardhaman", "Malda", "Barasat", "Habra", "Kharagpur", "Haldia", "Krishnanagar", "Jalpaiguri", "Balurghat", "Baharampur", "Santipur", "Basirhat", "Bongaon", "Haldia", "Raiganj", "Midnapore"],
+  "Andaman and Nicobar Islands": ["Port Blair", "Rangat", "Diglipur", "Mayabunder", "Ferrargunj", "Garacharma", "Bambooflat"],
+  "Chandigarh": ["Chandigarh"],
+  "Dadra and Nagar Haveli and Daman and Diu": ["Silvassa", "Daman", "Diu", "Amli", "Dadra"],
+  "Delhi": ["New Delhi", "Dwarka", "Rohini", "Pitampura", "Lajpat Nagar", "Karol Bagh", "Connaught Place", "Saket", "Janakpuri", "Preet Vihar", "Vasant Kunj", "Shahdara", "Mayur Vihar", "Hauz Khas", "Rajouri Garden"],
+  "Jammu and Kashmir": ["Srinagar", "Jammu", "Anantnag", "Baramulla", "Sopore", "Kathua", "Udhampur", "Pulwama", "Kupwara", "Poonch"],
+  "Ladakh": ["Leh", "Kargil"],
+  "Lakshadweep": ["Kavaratti", "Agatti", "Amini", "Andrott", "Minicoy", "Kalpeni"],
+  "Puducherry": ["Puducherry", "Karaikal", "Mahe", "Yanam", "Ozhukarai", "Villianur", "Ariyankuppam"]
+};
+
+const ALL_STATES = Object.keys(INDIA_CITIES).sort();
+const getCities = (stateName) => INDIA_CITIES[stateName] || [];
+
+const COMMON_EMAIL_DOMAINS = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "rediffmail.com", "icloud.com", "ymail.com", "protonmail.com", "yahoo.in", "gmail.co.in"];
+
+// ==========================================
+// SECTION 4 & 5: STRICT VALIDATION HELPERS
+// ==========================================
+
+const validateEmail = (email) => {
+  if (!email) return { valid: false, error: "Email is required" };
+  if (email.length > 254) return { valid: false, error: "Email is too long" };
+  if (email.includes(' ')) return { valid: false, error: "Email cannot contain spaces" };
+  
+  const parts = email.split('@');
+  if (parts.length !== 2) return { valid: false, error: "Email must contain exactly one @ symbol" };
+  
+  const [local, domain] = parts;
+  if (!local || local.length > 64) return { valid: false, error: "Invalid username part before @" };
+  if (!/^[a-zA-Z0-9.\-_]+$/.test(local)) return { valid: false, error: "Invalid characters in email username" };
+  if (local.startsWith('.') || local.endsWith('.') || local.startsWith('-') || local.endsWith('-') || local.startsWith('_') || local.endsWith('_')) {
+    return { valid: false, error: "Username cannot start or end with special characters" };
+  }
+  if (local.includes('..')) return { valid: false, error: "Username cannot contain consecutive dots" };
+  
+  if (!domain || !domain.includes('.')) return { valid: false, error: "Invalid domain format" };
+  const domainParts = domain.split('.');
+  for (let p of domainParts) {
+    if (!p) return { valid: false, error: "Domain contains empty segments" };
+    if (!/^[a-zA-Z0-9\-]+$/.test(p)) return { valid: false, error: "Invalid characters in domain" };
+  }
+  const tld = domainParts[domainParts.length - 1];
+  if (tld.length < 2 || tld.length > 6 || !/^[a-zA-Z]+$/.test(tld)) {
+    return { valid: false, error: "Invalid top-level domain (e.g., .com, .in)" };
+  }
+  
+  return { valid: true, error: "" };
+};
+
+const validateIndianPhone = (phone) => {
+  if (!phone) return { valid: false, cleaned: "", error: "Phone number is required" };
+  let cleaned = phone.replace(/\s+/g, '').replace(/-/g, '');
+  if (cleaned.startsWith('+91')) cleaned = cleaned.substring(3);
+  if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
+  cleaned = cleaned.replace(/\D/g, '');
+  
+  if (cleaned.length !== 10) return { valid: false, cleaned, error: "Phone must be exactly 10 digits" };
+  if (!/^[6-9]/.test(cleaned)) return { valid: false, cleaned, error: "Indian mobile must start with 6, 7, 8, or 9" };
+  if (/^(\d)\1{9}$/.test(cleaned)) return { valid: false, cleaned, error: "Invalid phone pattern" };
+  if ("1234567890".includes(cleaned) || "0987654321".includes(cleaned)) {
+    return { valid: false, cleaned, error: "Phone number cannot be sequential" };
+  }
+  return { valid: true, cleaned, error: "" };
+};
+
+const validatePincode = (pin) => /^[1-9][0-9]{5}$/.test(pin);
+
+// ==========================================
+// SECTION 6: ICONS (Inline SVG)
+// ==========================================
+
+const Icons = {
+  Home: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
+  Search: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
+  Cart: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
+  User: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
+  List: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
+  Star: ({ className, filled }) => <svg className={className} fill={filled ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>,
+  Check: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
+  Truck: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>,
+  Shield: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
+  ArrowRight: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>,
+  Eye: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>,
+  EyeOff: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>,
+  WhatsApp: ({ className }) => <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>,
+  Camera: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+  Chat: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>,
+  Send: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>,
+  Refresh: ({ className }) => <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+};
+
+// ==========================================
+// SECTION 7: CONTEXT & TOAST
+// ==========================================
+
+const AppContext = createContext();
+
+const ToastContainer = ({ toasts }) => (
+  <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+    {toasts.map(t => (
+      <div key={t.id} className={`pointer-events-auto flex items-center p-4 rounded-xl shadow-xl transition-all duration-300 transform translate-x-0 opacity-100 ${
+        t.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
+        t.type === 'error' ? 'bg-red-50 border border-red-200 text-red-800' :
+        t.type === 'warning' ? 'bg-orange-50 border border-orange-200 text-orange-800' :
+        'bg-blue-50 border border-blue-200 text-blue-800'
+      }`}>
+        {t.type === 'success' && <Icons.Check className="w-5 h-5 mr-3 text-green-600" />}
+        {t.type === 'error' && <span className="w-5 h-5 mr-3 text-red-600 font-bold">!</span>}
+        <p className="font-mukta font-medium text-sm">{t.message}</p>
+      </div>
+    ))}
+  </div>
+);
+
+// ==========================================
+// SECTION 8: CUSTOM UI COMPONENTS
+// ==========================================
+
+const EmailInput = ({ value, onChange, error, placeholder = "your@email.com" }) => {
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setShowSuggestions(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleTextChange = (e) => {
+    const val = e.target.value;
+    onChange(val);
+    
+    if (val.includes('@')) {
+      const [, domainPart] = val.split('@');
+      if (domainPart !== undefined) {
+        const matches = COMMON_EMAIL_DOMAINS.filter(d => d.startsWith(domainPart) && d !== domainPart);
+        setSuggestions(matches);
+        setShowSuggestions(matches.length > 0);
+      } else {
+        setShowSuggestions(false);
+      }
+    } else {
+      setShowSuggestions(false);
+    }
+  };
+
+  const selectSuggestion = (domain) => {
+    const localPart = value.split('@')[0];
+    onChange(`${localPart}@${domain}`);
+    setShowSuggestions(false);
+  };
+
+  const validation = value ? validateEmail(value) : { valid: false };
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <div className="relative">
+        <input 
+          type="email" 
+          value={value} 
+          onChange={handleTextChange}
+          onFocus={() => { if(suggestions.length) setShowSuggestions(true); }}
+          className={`w-full px-4 py-3 rounded-xl border-2 transition-all outline-none font-mukta text-gray-800 bg-white
+            ${error ? 'border-red-500 bg-red-50' : validation.valid ? 'border-green-500 bg-green-50/30' : 'border-gray-200 focus:border-[#FF6B00]'}`}
+          placeholder={placeholder}
+        />
+        {validation.valid && <Icons.Check className="absolute right-3 top-3.5 w-5 h-5 text-green-500" />}
+      </div>
+      {error && <p className="text-red-500 text-xs mt-1 font-medium pl-1">{error}</p>}
+      
+      {showSuggestions && (
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+          {suggestions.map(domain => (
+            <div 
+              key={domain} 
+              onClick={() => selectSuggestion(domain)}
+              className="px-4 py-2 hover:bg-orange-50 cursor-pointer text-sm text-gray-700 font-mukta border-b border-gray-50 last:border-0"
+            >
+              <span className="text-gray-400">{value.split('@')[0]}@</span>
+              <span className="font-semibold text-gray-800">{domain}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PhoneInput = ({ value, onChange, error }) => {
+  const handlePhoneChange = (e) => {
+    let val = e.target.value.replace(/\D/g, '');
+    if (val.length > 10) val = val.substring(0, 10);
+    let formatted = val;
+    if (val.length > 5) {
+      formatted = `${val.substring(0, 5)} ${val.substring(5)}`;
+    }
+    onChange(formatted);
+  };
+
+  const cleanVal = value.replace(/\D/g, '');
+  const validation = cleanVal.length > 0 ? validateIndianPhone(cleanVal) : { valid: false };
+
+  return (
+    <div className="relative w-full">
+      <div className={`flex items-center w-full rounded-xl border-2 overflow-hidden bg-white transition-all
+        ${error ? 'border-red-500' : validation.valid ? 'border-green-500' : 'border-gray-200 focus-within:border-[#FF6B00]'}`}>
+        <div className="bg-gray-50 px-4 py-3 border-r border-gray-200 text-gray-600 font-semibold font-mukta select-none flex items-center">
+          🇮🇳 +91
+        </div>
+        <input 
+          type="tel" 
+          value={value} 
+          onChange={handlePhoneChange}
+          placeholder="98765 43210"
+          className="w-full px-4 py-3 outline-none font-mukta text-gray-800 tracking-wide"
+        />
+        {validation.valid && <Icons.Check className="w-5 h-5 text-green-500 mr-3" />}
+      </div>
+      {error && <p className="text-red-500 text-xs mt-1 font-medium pl-1">{error}</p>}
+    </div>
+  );
+};
+
+const Button = ({ children, onClick, variant = 'primary', className = '', disabled = false, fullWidth = false, type = "button" }) => {
+  const baseStyle = "font-mukta font-bold rounded-xl transition-all duration-200 active:scale-95 flex items-center justify-center";
+  const variants = {
+    primary: "bg-gradient-to-r from-[#FF6B00] via-[#FF8C00] to-[#EA580C] bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white hover:shadow-lg hover:shadow-orange-500/40",
+    secondary: "bg-white text-[#FF6B00] border-2 border-[#FF6B00] hover:bg-orange-50",
+    whatsapp: "bg-gradient-to-r from-[#25D366] via-[#20BD5A] to-[#1DA851] bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white hover:shadow-lg hover:shadow-green-500/30",
+    dark: "bg-gradient-to-r from-[#78350F] via-[#92400E] to-[#78350F] bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white hover:shadow-lg",
+    outline: "bg-transparent text-gray-600 border border-gray-300 hover:bg-gray-50"
+  };
+  
+  return (
+    <button 
+      type={type}
+      onClick={onClick} 
+      disabled={disabled}
+      className={`${baseStyle} ${variants[variant]} ${fullWidth ? 'w-full' : 'px-6'} py-3.5 ${disabled ? 'opacity-50 cursor-not-allowed active:scale-100' : ''} ${className}`}
+    >
+      {children}
+    </button>
+  );
+};
+
+// ==========================================
+// SECTION 9: MAIN VIEWS & LAYOUT
+// ==========================================
+
+const Navbar = () => {
+  const { user, cart, navigate, logout, settings } = useContext(AppContext);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  return (
+    <nav className="fixed top-0 left-0 w-full z-40 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm">
+      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="flex items-center cursor-pointer active:scale-95 transition-transform" onClick={() => navigate('HOME')}>
+          {settings.logoUrl ? (
+            <img 
+              src={settings.logoUrl} 
+              alt="Logo" 
+              className="h-10 md:h-12 w-auto object-contain mr-3 drop-shadow-md" 
+            />
+          ) : (
+            <span className="text-3xl mr-3 drop-shadow-md">🪔</span>
+          )}
+          <div className="flex flex-col justify-center">
+            <h1 className="font-playfair font-bold text-2xl tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#FF6B00] via-[#F59E0B] to-[#FF6B00] animate-gradient-x relative z-10 leading-none mb-0.5">{settings.shopName}</h1>
+            {settings.showMadeBy !== false && (
+              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest leading-none ml-0.5">Made by {settings.ownerName}</span>
+            )}
+          </div>
+        </div>
+        
+        <div className="hidden md:flex flex-1 max-w-md mx-8 relative group">
+          <input 
+            type="text" 
+            placeholder="Search pooja items, clothing, etc..." 
+            className="w-full bg-gray-50 border border-gray-200 rounded-full py-2 pl-12 pr-4 outline-none focus:border-[#FF6B00] focus:bg-white transition-all font-mukta"
+          />
+          <Icons.Search className="absolute left-4 top-2.5 w-5 h-5 text-gray-400 group-focus-within:text-[#FF6B00] transition-colors" />
+        </div>
+
+        <div className="flex items-center space-x-4">
+          <div className="relative cursor-pointer hover:bg-gray-50 p-2 rounded-full transition-colors" onClick={() => navigate('CART')}>
+            <Icons.Cart className="w-6 h-6 text-gray-700" />
+            {cart.length > 0 && (
+              <span className="absolute top-0 right-0 bg-[#FF6B00] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-white">
+                {cart.length}
+              </span>
+            )}
+          </div>
+          
+          {user ? (
+            <div className="relative">
+              <div 
+                className="flex items-center space-x-2 cursor-pointer bg-orange-50 px-3 py-1.5 rounded-full border border-orange-100 hover:bg-orange-100 transition-colors"
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+              >
+                <div className="w-7 h-7 bg-amber-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <span className="font-mukta font-medium text-gray-800 text-sm hidden md:block">Namaste, {user.name.split(' ')[0]} 🙏</span>
+              </div>
+              
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-2 top-full z-50">
+                  <div className="px-4 py-2 border-b border-gray-50 mb-1">
+                    <p className="font-bold text-gray-800 truncate">{user.name}</p>
+                    <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                  </div>
+                  <button onClick={() => { setDropdownOpen(false); navigate('ORDERS'); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-[#FF6B00] flex items-center font-medium transition-colors">
+                    <Icons.List className="w-4 h-4 mr-2" /> My Orders
+                  </button>
+                  <button onClick={() => { setDropdownOpen(false); navigate('PROFILE'); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-[#FF6B00] flex items-center font-medium transition-colors">
+                    <Icons.User className="w-4 h-4 mr-2" /> Profile
+                  </button>
+                  <div className="h-px bg-gray-100 my-1"></div>
+                  <button onClick={() => { setDropdownOpen(false); logout(); }} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center font-medium transition-colors">
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button 
+              onClick={() => navigate('LOGIN')}
+              className="text-sm font-bold text-[#FF6B00] hover:bg-orange-50 px-4 py-2 rounded-full transition-colors border border-[#FF6B00]/20"
+            >
+              Login
+            </button>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+};
+
+const BottomNav = () => {
+  const { currentView, navigate, cart } = useContext(AppContext);
+  const tabs = [
+    { id: 'HOME', icon: Icons.Home, label: 'Home' },
+    { id: 'SEARCH', icon: Icons.Search, label: 'Search' },
+    { id: 'CART', icon: Icons.Cart, label: 'Cart', badge: cart.length },
+    { id: 'ORDERS', icon: Icons.List, label: 'Orders' },
+    { id: 'PROFILE', icon: Icons.User, label: 'Profile' }
+  ];
+
+  return (
+    <div className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 pb-safe pt-2 px-2 z-40 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] flex justify-between items-center h-16">
+      {tabs.map(tab => {
+        const active = currentView === tab.id || (tab.id === 'HOME' && currentView === 'PRODUCT_DETAIL');
+        return (
+          <button 
+            key={tab.id}
+            onClick={() => navigate(tab.id === 'SEARCH' ? 'HOME' : tab.id)}
+            className={`flex flex-col items-center justify-center w-full h-full relative transition-colors ${active ? 'text-[#FF6B00]' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            <div className="relative">
+              <tab.icon className={`w-6 h-6 mb-1 ${active ? 'stroke-[2.5px]' : ''}`} />
+              {tab.badge > 0 && (
+                <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
+                  {tab.badge}
+                </span>
+              )}
+            </div>
+            <span className={`text-[10px] font-mukta ${active ? 'font-bold' : 'font-medium'}`}>{tab.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+// ==========================================
+// SECTION 10: AUTHENTICATION VIEWS
+// ==========================================
+
+const LoginView = () => {
+  const { navigate, login, settings, showToast } = useContext(AppContext);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    setError('');
+    
+    // Check if it's not admin username, then only validate email
+    if (email !== settings.adminUsername) {
+      const emailValid = validateEmail(email);
+      if (!emailValid.valid) {
+        setError(emailValid.error);
+        return;
+      }
+    }
+    
+    if (!password) {
+      setError('Password is required');
+      return;
+    }
+
+    setLoading(true);
+    setTimeout(() => {
+      // Check Admin
+      if (email === settings.adminUsername && password === settings.adminPassword) {
+        // Admin login logic
+        showToast('success', 'Admin logged in');
+        navigate('ADMIN_DASHBOARD');
+        setLoading(false);
+        return;
+      }
+
+      // Check regular user
+      const users = store.get('rote_users', []);
+      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      
+      if (!user) {
+        setError('Account not found. Please sign up first.');
+      } else if (user.password !== password) {
+        setError('Incorrect password. Please try again.');
+      } else {
+        login(user);
+        showToast('success', `Welcome back, ${user.name}!`);
+      }
+      setLoading(false);
+    }, 800);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FDF8F0] pt-20 pb-24 px-4 flex flex-col items-center justify-center">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 border border-gray-100 relative">
+        <button 
+          onClick={() => navigate('HOME')}
+          className="absolute top-4 left-4 p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-800 rounded-full transition-colors flex items-center justify-center"
+          title="Back to Home"
+        >
+          <Icons.ArrowRight className="w-5 h-5 transform rotate-180" />
+        </button>
+
+        <div className="text-center mb-8">
+          <div className="inline-block relative">
+            <span className="text-5xl mb-2 block animate-bounce-slow">🪔</span>
+            <div className="absolute inset-0 bg-orange-400 blur-2xl opacity-20 rounded-full animate-pulse"></div>
+          </div>
+          <h2 className="text-3xl font-playfair font-bold text-gray-900 mt-4 glow-text">{settings.shopName}</h2>
+          <p className="text-gray-500 font-mukta mt-1">{settings.tagline}</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-xl">
+            <div className="flex">
+              <span className="text-red-500 font-bold mr-2">!</span>
+              <p className="text-sm text-red-700 font-mukta">{error}</p>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-5" noValidate>
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1.5 font-mukta">Email Address</label>
+            <EmailInput value={email} onChange={setEmail} />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1.5 font-mukta">Password</label>
+            <div className="relative">
+              <input 
+                type={showPassword ? "text" : "password"} 
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 outline-none focus:border-[#FF6B00] transition-colors font-mukta bg-white"
+                placeholder="••••••••"
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600"
+              >
+                {showPassword ? <Icons.EyeOff className="w-5 h-5" /> : <Icons.Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="flex items-center text-sm text-gray-600 cursor-pointer">
+              <input type="checkbox" className="mr-2 w-4 h-4 rounded text-[#FF6B00] focus:ring-[#FF6B00]" />
+              <span className="font-mukta">Remember me</span>
+            </label>
+            <a href="#" className="text-sm text-[#FF6B00] font-bold hover:underline font-mukta">Forgot?</a>
+          </div>
+
+          <Button type="submit" fullWidth disabled={loading} className="mt-2 text-lg">
+            {loading ? <span className="animate-pulse">Verifying...</span> : "Secure Login"}
+          </Button>
+        </form>
+
+        <div className="mt-8 text-center border-t border-gray-100 pt-6">
+          <p className="text-gray-600 font-mukta">
+            New here?{' '}
+            <button onClick={() => navigate('SIGNUP')} className="text-[#FF6B00] font-bold hover:underline">
+              Create Account
+            </button>
+          </p>
+        </div>
+        
+        <div className="mt-6 flex justify-center space-x-4 text-xs text-gray-400 font-mukta font-medium">
+          <span className="flex items-center"><Icons.Shield className="w-3 h-3 mr-1" /> Secure</span>
+          <span>•</span>
+          <span className="flex items-center"><Icons.Check className="w-3 h-3 mr-1" /> Trusted</span>
+          <span>•</span>
+          <span>🇮🇳 Made in India</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SignupView = () => {
+  const { navigate, login, showToast, settings } = useContext(AppContext);
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState({
+    name: '', email: '', phone: '', password: '', confirmPassword: '',
+    street: '', state: '', city: '', pincode: '', landmark: ''
+  });
+  const [errors, setErrors] = useState({});
+  const [passwordStrength, setPasswordStrength] = useState(0); // 0-4
+
+  const handleInput = (field, val) => {
+    setFormData(prev => ({ ...prev, [field]: val }));
+    setErrors(prev => ({ ...prev, [field]: null }));
+    
+    if (field === 'password') {
+      let score = 0;
+      if (val.length >= 6) score++;
+      if (/[A-Z]/.test(val) && /[a-z]/.test(val)) score++;
+      if (/\d/.test(val)) score++;
+      if (/[^A-Za-z0-9]/.test(val)) score++;
+      setPasswordStrength(score);
+    }
+  };
+
+  const validateStep1 = () => {
+    let errs = {};
+    if (formData.name.trim().length < 3) errs.name = "Name must be at least 3 characters";
+    if (!/^[a-zA-Z\s]+$/.test(formData.name)) errs.name = "Only letters and spaces allowed";
+    
+    const emailCheck = validateEmail(formData.email);
+    if (!emailCheck.valid) errs.email = emailCheck.error;
+    
+    const phoneCheck = validateIndianPhone(formData.phone);
+    if (!phoneCheck.valid) errs.phone = phoneCheck.error;
+    
+    if (formData.password.length < 6) errs.password = "Password minimum 6 characters";
+    if (formData.password !== formData.confirmPassword) errs.confirmPassword = "Passwords do not match";
+
+    // Check existing
+    const users = store.get('rote_users', []);
+    if (users.find(u => u.email.toLowerCase() === formData.email.toLowerCase())) {
+      errs.email = "This email is already registered. Please login.";
+    }
+    if (phoneCheck.valid && users.find(u => u.phone === phoneCheck.cleaned)) {
+      errs.phone = "This phone number is already registered.";
+    }
+
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const validateStep2 = () => {
+    let errs = {};
+    if (formData.street.trim().length < 5) errs.street = "Detailed address required";
+    if (!formData.state) errs.state = "State is required";
+    if (!formData.city) errs.city = "City is required";
+    if (!validatePincode(formData.pincode)) errs.pincode = "Enter valid 6-digit pincode";
+    
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleNext = () => {
+    if (validateStep1()) setStep(2);
+  };
+
+  const handleSubmit = () => {
+    if (validateStep2()) {
+      const users = store.get('rote_users', []);
+      const newUser = {
+        id: generateId(),
+        name: sanitizeInput(formData.name),
+        email: formData.email.toLowerCase(),
+        phone: validateIndianPhone(formData.phone).cleaned,
+        password: formData.password, // In real app, hash this
+        address: {
+          street: sanitizeInput(formData.street),
+          city: sanitizeInput(formData.city),
+          state: formData.state,
+          pincode: formData.pincode,
+          landmark: sanitizeInput(formData.landmark)
+        },
+        createdAt: new Date().toISOString()
+      };
+      
+      users.push(newUser);
+      store.set('rote_users', users);
+      login(newUser);
+      showToast('success', 'Account created successfully! 🎉');
+    }
+  };
+
+  const getStrengthColor = () => {
+    switch(passwordStrength) {
+      case 1: return 'bg-red-500 w-1/4';
+      case 2: return 'bg-orange-500 w-2/4';
+      case 3: return 'bg-yellow-400 w-3/4';
+      case 4: return 'bg-green-500 w-full';
+      default: return 'bg-gray-200 w-full';
+    }
+  };
+  const getStrengthText = () => ['Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'][passwordStrength] || 'Too short';
+
+  return (
+    <div className="min-h-screen bg-[#FDF8F0] pt-20 pb-24 px-4 flex flex-col items-center justify-center">
+      <div className="w-full max-w-lg bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+        
+        <div className="bg-gray-50 px-6 py-6 border-b border-gray-100 flex justify-between items-center">
+          <div className="flex items-center">
+            <button 
+              onClick={() => navigate('HOME')}
+              className="mr-3 p-2 text-gray-400 hover:text-gray-800 hover:bg-gray-200 rounded-full transition-colors"
+              title="Back to Home"
+            >
+              <Icons.ArrowRight className="w-5 h-5 transform rotate-180" />
+            </button>
+            <div>
+              <h2 className="text-2xl font-playfair font-bold text-gray-900">Join {settings.shopName} 🛍️</h2>
+              <p className="text-sm text-gray-500 font-mukta mt-1">Step {step} of 2</p>
+            </div>
+          </div>
+          <div className="flex space-x-2">
+            <div className={`h-2 w-8 rounded-full ${step >= 1 ? 'bg-[#FF6B00]' : 'bg-gray-200'}`}></div>
+            <div className={`h-2 w-8 rounded-full ${step >= 2 ? 'bg-[#FF6B00]' : 'bg-gray-200'}`}></div>
+          </div>
+        </div>
+
+        <div className="p-8">
+          {step === 1 && (
+            <div className="space-y-5 animate-fade-in">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Full Name</label>
+                <input 
+                  type="text" value={formData.name} onChange={e => handleInput('name', e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors font-mukta ${errors.name ? 'border-red-500 bg-red-50' : 'border-gray-200 focus:border-[#FF6B00]'}`}
+                  placeholder="Rahul Kumar"
+                />
+                {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Email Address</label>
+                <EmailInput value={formData.email} onChange={v => handleInput('email', v)} error={errors.email} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Mobile Number</label>
+                <PhoneInput value={formData.phone} onChange={v => handleInput('phone', v)} error={errors.phone} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Password</label>
+                <div className="relative">
+                  <input 
+                    type="password" value={formData.password} onChange={e => handleInput('password', e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors font-mukta ${errors.password ? 'border-red-500' : 'border-gray-200 focus:border-[#FF6B00]'}`}
+                    placeholder="Create a strong password"
+                  />
+                </div>
+                {formData.password.length > 0 && (
+                  <div className="mt-2 flex items-center justify-between px-1">
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden mr-3">
+                      <div className={`h-full transition-all duration-300 ${getStrengthColor()}`}></div>
+                    </div>
+                    <span className="text-[10px] uppercase font-bold text-gray-500">{getStrengthText()}</span>
+                  </div>
+                )}
+                {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Confirm Password</label>
+                <div className="relative">
+                  <input 
+                    type="password" value={formData.confirmPassword} onChange={e => handleInput('confirmPassword', e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors font-mukta ${errors.confirmPassword ? 'border-red-500' : 'border-gray-200 focus:border-[#FF6B00]'}`}
+                    placeholder="Repeat password"
+                  />
+                  {formData.confirmPassword && formData.password === formData.confirmPassword && (
+                    <Icons.Check className="absolute right-4 top-3.5 w-5 h-5 text-green-500" />
+                  )}
+                </div>
+                {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword}</p>}
+              </div>
+
+              <Button onClick={handleNext} fullWidth className="mt-6">Next: Delivery Address <Icons.ArrowRight className="ml-2 w-5 h-5" /></Button>
+              
+              <p className="text-center text-sm text-gray-500 mt-6 font-mukta">
+                Already have an account? <button onClick={() => navigate('LOGIN')} className="text-[#FF6B00] font-bold">Login here</button>
+              </p>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-5 animate-fade-in">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">Street Address / House No.</label>
+                <textarea 
+                  value={formData.street} onChange={e => handleInput('street', e.target.value)} rows={2}
+                  className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors font-mukta resize-none ${errors.street ? 'border-red-500' : 'border-gray-200 focus:border-[#FF6B00]'}`}
+                  placeholder="e.g. 42, Shiv Nagar, Near Hanuman Mandir"
+                />
+                {errors.street && <p className="text-red-500 text-xs mt-1">{errors.street}</p>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">State</label>
+                  <select 
+                    value={formData.state} 
+                    onChange={e => { handleInput('state', e.target.value); handleInput('city', ''); }}
+                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors font-mukta bg-white ${errors.state ? 'border-red-500' : 'border-gray-200 focus:border-[#FF6B00]'}`}
+                  >
+                    <option value="">Select State</option>
+                    {ALL_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">City</label>
+                  <select 
+                    value={formData.city} onChange={e => handleInput('city', e.target.value)} disabled={!formData.state}
+                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors font-mukta bg-white ${errors.city ? 'border-red-500' : 'border-gray-200 focus:border-[#FF6B00]'} disabled:bg-gray-100`}
+                  >
+                    <option value="">Select City</option>
+                    {formData.state && getCities(formData.state).map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">Pincode</label>
+                  <input 
+                    type="text" value={formData.pincode} onChange={e => handleInput('pincode', e.target.value.replace(/\D/g, '').substring(0,6))}
+                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-colors font-mukta text-center tracking-widest ${errors.pincode ? 'border-red-500' : 'border-gray-200 focus:border-[#FF6B00]'}`}
+                    placeholder="000000"
+                  />
+                  {errors.pincode && <p className="text-red-500 text-xs mt-1">{errors.pincode}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5">Landmark (Optional)</label>
+                  <input 
+                    type="text" value={formData.landmark} onChange={e => handleInput('landmark', e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 outline-none focus:border-[#FF6B00] transition-colors font-mukta"
+                    placeholder="Near school"
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-4 mt-8">
+                <Button variant="outline" onClick={() => setStep(1)} className="w-1/3">← Back</Button>
+                <Button onClick={handleSubmit} className="w-2/3">Create Account <Icons.Check className="ml-2 w-5 h-5" /></Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// SECTION 11: HOME PAGE COMPONENTS
+// ==========================================
+
+const ProductCard = ({ product }) => {
+  const { setSelectedProduct, navigate, reviews, settings } = useContext(AppContext);
+  const discount = Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100);
+
+  // Dynamic reviews calculation
+  const productReviews = reviews.filter(r => r.productId === product.id);
+  const reviewCount = productReviews.length;
+  const avgRating = reviewCount > 0 ? (productReviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount).toFixed(1) : 0;
+
+  const viewDetails = () => {
+    setSelectedProduct(product);
+    navigate('PRODUCT_DETAIL');
+  };
+
+  const innerCardContent = (
+    <>
+      <div className="relative h-56 overflow-hidden bg-gray-100 shrink-0">
+        <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+        
+        {product.isPremium && (
+          <div className="absolute top-0 left-0 w-full bg-gradient-to-r from-[#4285f4] via-[#9b72cb] to-[#f4b400] text-white text-[10px] font-bold py-1.5 text-center shadow-md z-20 tracking-widest uppercase">
+            ✨ Best Deal
+          </div>
+        )}
+
+        <div className={`absolute left-2 flex flex-col gap-1 items-start ${product.isPremium ? 'top-9' : 'top-2'}`}>
+          {product.freeDelivery && <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm tracking-wide">🚚 FREE DELIVERY</span>}
+          {product.cod && <span className="bg-[#EA580C] text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm tracking-wide">💵 CASH ON DELIVERY</span>}
+        </div>
+        
+        {discount > 0 && (
+          <div className={`absolute right-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-md ${product.isPremium ? 'top-9' : 'top-2'}`}>
+            {discount}% OFF
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 flex flex-col flex-1">
+        <div className="text-xs text-gray-400 font-bold mb-1 uppercase tracking-wider">{product.category}</div>
+        <h3 className="font-playfair font-bold text-gray-900 text-lg leading-tight mb-2 line-clamp-2">{product.name}</h3>
+        
+        <div className="flex items-center mb-3">
+          <div className="flex text-yellow-400">
+            {[...Array(5)].map((_, i) => <Icons.Star key={i} className="w-4 h-4" filled={i < Math.floor(avgRating || 0)} />)}
+          </div>
+          <span className="text-xs text-gray-500 ml-2 font-mukta">({reviewCount})</span>
+        </div>
+
+        <div className="mt-auto pt-3 border-t border-gray-50 flex items-end justify-between mb-4">
+          <div>
+            <span className="text-2xl font-bold text-[#FF6B00]">{formatPrice(product.price)}</span>
+            {product.originalPrice > product.price && (
+              <span className="text-sm text-gray-400 line-through ml-2 font-mukta">{formatPrice(product.originalPrice)}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex space-x-2 w-full mt-auto" onClick={e => e.stopPropagation()}>
+          <Button fullWidth variant="dark" className="text-sm py-2 px-0" onClick={viewDetails}>
+            <Icons.Cart className="w-4 h-4 mr-1" /> View
+          </Button>
+          <Button fullWidth variant="whatsapp" className="text-sm py-2 px-0" onClick={(e) => {
+            e.stopPropagation();
+            const text = encodeURIComponent(`Namaste! 🙏\n\nMujhe details chahiye:\n🛍️ ${product.name}\n💰 Price: ₹${product.price}\n\nLink: ${settings.shopName.replace(/\s+/g, '')}`);
+            window.open(`https://wa.me/${settings.whatsappNumber}?text=${text}`, '_blank');
+          }}>
+            <Icons.WhatsApp className="w-4 h-4 mr-1" /> Deal
+          </Button>
+        </div>
+        <p className="text-[10px] text-green-600 font-bold text-center mt-2 font-mukta">💡 WhatsApp pe best deal paye!</p>
+      </div>
+    </>
+  );
+
+  if (product.isPremium) {
+    return (
+      <div onClick={viewDetails} className="relative p-[3px] rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.08)] hover:shadow-[0_12px_30px_rgba(155,114,203,0.4)] transition-all duration-300 group cursor-pointer flex flex-col h-full overflow-hidden hover:-translate-y-2">
+        <div className="rainbow-glow"></div>
+        <div className="relative flex flex-col flex-1 h-full bg-white rounded-[13px] overflow-hidden z-10">
+          {innerCardContent}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.06)] hover:shadow-[0_12px_30px_rgba(0,0,0,0.15)] transition-all duration-300 border border-gray-100 overflow-hidden group cursor-pointer flex flex-col h-full hover:-translate-y-2" onClick={viewDetails}>
+      {innerCardContent}
+    </div>
+  );
+};
+
+const HomeView = () => {
+  const { products, settings } = useContext(AppContext);
+  const [activeCategory, setActiveCategory] = useState('All');
+  
+  const categories = ['All', ...new Set(products.map(p => p.category))];
+  const filteredProducts = activeCategory === 'All' ? products : products.filter(p => p.category === activeCategory);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#FDF8F0] via-[#FFF0DB] to-[#FDF8F0] animate-gradient-bg pb-24 pt-16">
+      {/* Hero Section */}
+      <div className="relative bg-[#1A0B02] text-white py-16 px-4 overflow-hidden">
+        {/* Aandhi (Storm) Animated Background */}
+        <div className="absolute inset-0 bg-[#000000] z-0"></div>
+        
+        <div className="absolute inset-[-50%] z-0 opacity-50 pointer-events-none">
+          <div className="absolute top-[30%] left-[30%] w-[35rem] h-[35rem] bg-[#FF6B00] rounded-[40%_60%_70%_30%] blur-[100px] animate-storm-1 mix-blend-screen"></div>
+          <div className="absolute top-[40%] right-[30%] w-[40rem] h-[40rem] bg-[#F59E0B] rounded-[60%_40%_30%_70%] blur-[120px] animate-storm-2 mix-blend-screen" style={{ animationDelay: '-5s' }}></div>
+          <div className="absolute bottom-[20%] left-[40%] w-[30rem] h-[30rem] bg-[#9A3412] rounded-[50%_50%_40%_60%] blur-[90px] animate-storm-3 mix-blend-screen" style={{ animationDelay: '-10s' }}></div>
+        </div>
+        
+        <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px] z-0 pointer-events-none"></div>
+        
+        <div className="relative z-10 max-w-6xl mx-auto text-center">
+          <span className="inline-block px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-transparent bg-clip-text bg-gradient-to-r from-[#FCD34D] via-[#FF6B00] to-[#FCD34D] animate-gradient-x text-sm font-bold mb-6 backdrop-blur-sm drop-shadow-md">
+            ✨ Welcome to {settings.shopName}
+          </span>
+          <h1 className="text-4xl md:text-6xl font-playfair font-bold mb-4 pb-2 leading-tight text-transparent bg-clip-text bg-gradient-to-r from-[#FCD34D] via-[#FF6B00] to-[#FCD34D] animate-gradient-x drop-shadow-[0_4px_6px_rgba(0,0,0,0.6)]">
+            {settings.heroTitle}
+          </h1>
+          <p className="text-lg md:text-xl text-gray-200 font-mukta mb-8 max-w-2xl mx-auto drop-shadow-md">
+            {settings.heroSubtitle}
+          </p>
+          
+          <div className="flex flex-wrap justify-center gap-4 md:gap-5 text-sm md:text-base font-mukta font-bold text-white mt-10 relative z-20">
+            {settings.trustBadges.map((badge, i) => {
+              const isCodBadge = badge.toLowerCase().includes('cash on delivery');
+              return (
+              <div 
+                key={i} 
+                className={`group flex items-center px-5 py-2.5 rounded-full border shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all duration-500 cursor-default bg-[length:200%_auto] animate-gradient-x
+                  ${isCodBadge 
+                    ? 'bg-gradient-to-r from-[#FF6B00] via-[#F59E0B] to-[#FF6B00] border-[#FF6B00] shadow-[0_0_20px_rgba(255,107,0,0.5)] scale-105 hover:scale-110' 
+                    : 'bg-gradient-to-r from-white/10 via-[#FF6B00]/30 to-white/10 border-white/30 hover:border-orange-400/80 hover:-translate-y-1.5 backdrop-blur-md'
+                  }
+                  ${i % 2 === 0 ? 'animate-float' : 'animate-float-delayed'}
+                `}
+              >
+                <span className={`tracking-wide transition-transform duration-300 drop-shadow-md ${isCodBadge ? 'text-white' : 'text-orange-50 group-hover:text-white group-hover:scale-105'}`}>
+                  {badge}
+                </span>
+              </div>
+            )})}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-6xl mx-auto px-4 mt-8">
+        {/* Categories */}
+        <div className="flex overflow-x-auto pb-4 mb-6 hide-scrollbar space-x-3 snap-x">
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`snap-start whitespace-nowrap px-6 py-2.5 rounded-full font-bold font-mukta transition-all duration-300 shadow-sm
+                ${activeCategory === cat ? 'bg-[#FF6B00] text-white shadow-orange-500/30' : 'bg-white text-gray-600 border border-gray-200 hover:bg-orange-50'}`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Product Grid */}
+        {filteredProducts.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredProducts.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        ) : (
+          <div className="py-20 text-center">
+            <span className="text-6xl mb-4 block opacity-50">🔍</span>
+            <h3 className="text-2xl font-playfair font-bold text-gray-800">No products found</h3>
+            <p className="text-gray-500 font-mukta mt-2">Try selecting a different category.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <footer className="mt-20 border-t border-gray-200 bg-white pt-10 pb-20 md:pb-10 text-center">
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center px-6 gap-6 mb-8">
+          <div className="animate-pulse">
+            <span className="bg-[#FF6B00]/10 text-[#FF6B00] px-4 py-2 rounded-full font-bold text-sm border border-[#FF6B00]/20 inline-block">
+              🇮🇳 Made in India with ❤️
+            </span>
+          </div>
+          
+          <div className="flex flex-col items-center md:items-end">
+            <span className="text-sm font-bold text-gray-600 mb-2 font-mukta">Contact Us:</span>
+            <div className="flex gap-3">
+              <button onClick={() => {
+                const text = encodeURIComponent(`Namaste! 🙏\nMujhe kuch jankari chahiye thi.`);
+                window.open(`https://wa.me/${settings.whatsappNumber}?text=${text}`, '_blank');
+              }} className="flex items-center gap-2 bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 px-4 py-2 rounded-xl font-bold transition-colors">
+                <Icons.WhatsApp className="w-5 h-5" /> WhatsApp
+              </button>
+              <button onClick={() => window.dispatchEvent(new CustomEvent('open-chat'))} className="flex items-center gap-2 bg-orange-50 text-[#FF6B00] border border-orange-200 hover:bg-orange-100 px-4 py-2 rounded-xl font-bold transition-colors shadow-sm">
+                <Icons.Chat className="w-5 h-5" /> Live Chat
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p className="font-playfair font-bold text-xl text-gray-800 mb-1 shimmer-text">
+          A venture by {settings.ownerName}
+        </p>
+        <p className="text-gray-500 font-mukta text-sm">
+          © {new Date().getFullYear()} {settings.shopName}. All rights reserved.
+        </p>
+      </footer>
+    </div>
+  );
+};
+
+// ==========================================
+// SECTION 12: PRODUCT DETAIL PAGE & REVIEWS
+// ==========================================
+
+const ReviewSection = ({ product }) => {
+  const { user, orders, reviews, setReviews, showToast } = useContext(AppContext);
+  const [rating, setRating] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [reviewImage, setReviewImage] = useState(null);
+
+  const productReviews = reviews.filter(r => r.productId === product.id);
+  const hasBought = user && orders.some(o => o.userId === user.id && o.product.id === product.id);
+  const hasReviewed = user && productReviews.some(r => r.userId === user.id);
+
+  const handleImage = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 1048576) { // 1MB limit for local storage safety
+        showToast('error', 'File size 1MB se kam honi chahiye');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => setReviewImage(reader.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!reviewText.trim()) return showToast('error', 'Kripya apna review likhein');
+    
+    const newReview = {
+      id: generateId(),
+      productId: product.id,
+      userId: user.id,
+      userName: user.name,
+      rating,
+      text: reviewText,
+      image: reviewImage,
+      createdAt: new Date().toISOString()
+    };
+    
+    const updatedReviews = [newReview, ...reviews];
+    setReviews(updatedReviews);
+    store.set('rote_reviews', updatedReviews);
+    showToast('success', 'Aapka review add ho gaya! 🎉');
+    setReviewText('');
+    setReviewImage(null);
+    setRating(5);
+  };
+
+  return (
+    <div className="mt-12 border-t border-gray-100 pt-8">
+      <h3 className="text-2xl font-playfair font-bold text-gray-900 mb-6">Customer Reviews</h3>
+      
+      {/* Write Review Form (Only if bought and not reviewed) */}
+      {hasBought && !hasReviewed && (
+        <div className="bg-orange-50 border border-orange-100 rounded-2xl p-6 mb-8">
+          <h4 className="font-bold text-gray-900 mb-4 font-mukta">Aapne ye product kharida hai, apna anubhav share karein!</h4>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <p className="text-sm font-bold text-gray-700 mb-2">Rating</p>
+              <div className="flex gap-1 text-yellow-400 text-2xl cursor-pointer">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <span key={star} onClick={() => setRating(star)} className={rating >= star ? 'opacity-100' : 'opacity-30'}>★</span>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <textarea 
+                value={reviewText} onChange={e => setReviewText(e.target.value)} 
+                placeholder="Product kaisa laga? Yahan likhein..." rows="3"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#FF6B00] font-mukta resize-none bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer w-fit px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                <Icons.Camera className="w-5 h-5 text-gray-500" />
+                <span className="text-sm font-bold text-gray-600 font-mukta">Upload Photo (Camera/Gallery)</span>
+                <input type="file" accept="image/*" onChange={handleImage} className="hidden" />
+              </label>
+              {reviewImage && (
+                <div className="mt-3 relative w-24 h-24">
+                  <img src={reviewImage} alt="Review upload" className="w-full h-full object-cover rounded-xl border border-gray-200" />
+                  <button type="button" onClick={() => setReviewImage(null)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">✕</button>
+                </div>
+              )}
+            </div>
+
+            <Button type="submit" className="py-2.5 px-8">Submit Review</Button>
+          </form>
+        </div>
+      )}
+
+      {/* Review List */}
+      <div className="space-y-6">
+        {productReviews.length === 0 ? (
+          <p className="text-gray-500 font-mukta bg-gray-50 p-6 rounded-2xl text-center">Abhi tak is product par koi review nahi hai.</p>
+        ) : (
+          productReviews.map(r => (
+            <div key={r.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-[#FF6B00]/10 text-[#FF6B00] rounded-full flex items-center justify-center font-bold text-sm">
+                    {r.userName.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-bold text-gray-900 text-sm leading-none">{r.userName}</p>
+                    <p className="text-xs text-gray-400 mt-1">{formatDate(r.createdAt)}</p>
+                  </div>
+                </div>
+                <div className="flex text-yellow-400">
+                  {[...Array(5)].map((_, i) => <Icons.Star key={i} className="w-4 h-4" filled={i < r.rating} />)}
+                </div>
+              </div>
+              <p className="text-gray-600 font-mukta text-sm mt-3">{r.text}</p>
+              {r.image && (
+                <img src={r.image} alt="User review" className="mt-3 w-32 h-32 object-cover rounded-xl border border-gray-100" />
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+const ProductDetailView = () => {
+  const { selectedProduct, navigate, settings, showToast, placeOrderDirect, reviews, addToCart } = useContext(AppContext);
+  const [mainImageIdx, setMainImageIdx] = useState(0);
+  const [qty, setQty] = useState(1);
+  const [showOrderModal, setShowOrderModal] = useState(false);
+
+  if (!selectedProduct) {
+    navigate('HOME');
+    return null;
+  }
+
+  const p = selectedProduct;
+  const discount = Math.round(((p.originalPrice - p.price) / p.originalPrice) * 100);
+
+  // Dynamic reviews calculation
+  const productReviews = reviews.filter(r => r.productId === p.id);
+  const reviewCount = productReviews.length;
+  const avgRating = reviewCount > 0 ? (productReviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount).toFixed(1) : 0;
+
+  const handleWhatsApp = () => {
+    const text = encodeURIComponent(`Namaste ${settings.ownerName} ji! 🙏\n\nMujhe yeh order karna hai:\n\n🛍️ Product: *${p.name}*\n💰 Price: ₹${p.price}\n📦 Quantity: ${qty}\n\nKripya confirm karein aur best deal batayein. Dhanyawad!`);
+    window.open(`https://wa.me/${settings.whatsappNumber}?text=${text}`, '_blank');
+    // Also track as whatsapp intent silently if user is logged in
+    placeOrderDirect(p, qty, 'whatsapp_intent'); 
+  };
+
+  return (
+    <div className="min-h-screen bg-white pt-16 pb-32">
+      {/* Order Modal Injection */}
+      {showOrderModal && <OrderConfirmModal product={p} qty={qty} onClose={() => setShowOrderModal(false)} />}
+
+      <div className="max-w-6xl mx-auto px-4 md:py-8 flex flex-col md:flex-row gap-8">
+        
+        {/* Images Left */}
+        <div className="w-full md:w-1/2 -mx-4 md:mx-0">
+          <div className="relative aspect-square md:rounded-3xl overflow-hidden bg-gray-100">
+            <button onClick={() => navigate('HOME')} className="absolute top-4 left-4 z-10 bg-white/80 backdrop-blur p-2 rounded-full shadow-md text-gray-800">
+              <Icons.ArrowRight className="w-6 h-6 transform rotate-180" />
+            </button>
+            <img src={p.images[mainImageIdx]} alt={p.name} className="w-full h-full object-cover" />
+            {discount > 0 && <span className="absolute top-4 right-4 bg-red-600 text-white font-bold px-3 py-1.5 rounded-full shadow-lg">{discount}% OFF</span>}
+          </div>
+          
+          <div className="flex gap-3 mt-4 px-4 md:px-0 overflow-x-auto hide-scrollbar">
+            {p.images.map((img, idx) => (
+              <div 
+                key={idx} 
+                onClick={() => setMainImageIdx(idx)}
+                className={`w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${idx === mainImageIdx ? 'border-[#FF6B00] shadow-md' : 'border-transparent opacity-70 hover:opacity-100'}`}
+              >
+                <img src={img} className="w-full h-full object-cover" alt="thumb" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Details Right */}
+        <div className="w-full md:w-1/2 flex flex-col pt-4 md:pt-0">
+          <div className="mb-4 flex flex-wrap gap-2">
+            {p.freeDelivery && <span className="bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded-full flex items-center"><Icons.Truck className="w-3 h-3 mr-1"/> Free Delivery</span>}
+            {p.cod && <span className="bg-orange-100 text-orange-800 text-xs font-bold px-3 py-1 rounded-full flex items-center">💵 Cash on Delivery</span>}
+            {p.sevenDayReplace ? (
+              <span className="bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded-full flex items-center"><Icons.Refresh className="w-3 h-3 mr-1"/> 7 Days Replace</span>
+            ) : (
+              <span className="bg-red-100 text-red-800 text-xs font-bold px-3 py-1 rounded-full flex items-center">⚠️ No Return</span>
+            )}
+            <span className="bg-gray-100 text-gray-800 text-xs font-bold px-3 py-1 rounded-full">{p.category}</span>
+          </div>
+
+          <h1 className="text-3xl md:text-4xl font-playfair font-bold text-gray-900 leading-tight mb-3">{p.name}</h1>
+          
+          <div className="flex items-center mb-6 border-b border-gray-100 pb-6">
+            <div className="flex text-yellow-400 mr-2">
+              {[...Array(5)].map((_, i) => <Icons.Star key={i} className="w-5 h-5" filled={i < Math.floor(avgRating || 0)} />)}
+            </div>
+            <span className="text-sm font-bold text-gray-700">{avgRating}</span>
+            <span className="text-sm text-gray-500 font-mukta ml-2">({reviewCount} reviews)</span>
+          </div>
+
+          <div className="mb-6">
+            <div className="flex items-baseline">
+              <span className="text-4xl font-bold text-[#FF6B00] mr-3">{formatPrice(p.price)}</span>
+              {p.originalPrice > p.price && (
+                <span className="text-xl text-gray-400 line-through font-mukta">{formatPrice(p.originalPrice)}</span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Inclusive of all taxes</p>
+          </div>
+
+          {p.sevenDayReplace ? (
+            <div className="mb-6 flex items-center gap-3 bg-green-50 border border-green-200 p-3 rounded-xl shadow-sm">
+              <div className="bg-green-100 p-2 rounded-full animate-pulse-slow">
+                <Icons.Refresh className="w-6 h-6 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-green-900 font-mukta">7 Days Replacement Policy</p>
+                <p className="text-xs text-green-700 font-mukta">Easy & hassle-free replacement within 7 days of delivery.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-6 flex items-center gap-3 bg-red-50 border border-red-200 p-3 rounded-xl shadow-sm">
+              <div className="bg-red-100 p-2 rounded-full">
+                <span className="text-xl">⚠️</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-red-900 font-mukta">Non-Returnable Item</p>
+                <p className="text-xs text-red-700 font-mukta">{p.noReplaceReason || "Yeh item return ya exchange nahi kiya ja sakta."}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-8 bg-gray-50 p-4 rounded-2xl">
+            <h3 className="font-bold text-gray-900 mb-2 font-mukta">Product Description</h3>
+            <p className="text-gray-600 font-mukta leading-relaxed text-sm md:text-base">{p.description}</p>
+          </div>
+
+          <div className="flex items-center gap-6 mb-8">
+            <span className="font-bold text-gray-700 font-mukta">Quantity:</span>
+            <div className="flex items-center border-2 border-gray-200 rounded-xl bg-white overflow-hidden">
+              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-12 h-12 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-xl font-bold transition-colors">-</button>
+              <div className="w-12 h-12 flex items-center justify-center font-bold text-lg border-x-2 border-gray-200">{qty}</div>
+              <button onClick={() => setQty(q => Math.max(1, Math.min(p.stock, q + 1)))} className="w-12 h-12 flex items-center justify-center text-gray-600 hover:bg-gray-100 text-xl font-bold transition-colors">+</button>
+            </div>
+            <span className="text-sm text-gray-500 font-mukta">{p.stock} items left</span>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="space-y-4 mt-auto">
+            <div className="bg-green-50 border border-green-200 p-4 rounded-xl flex items-start">
+              <span className="text-xl mr-3">⭐</span>
+              <p className="text-sm text-green-800 font-mukta font-medium">
+                <strong>9 out of 10 customers</strong> prefer WhatsApp for faster order confirmation and exclusive deals! Tap the green button below 👆
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+              <Button variant="secondary" fullWidth onClick={() => addToCart(p, qty)} className="py-4 text-lg">
+                🛒 Add to Cart
+              </Button>
+              <Button variant="dark" fullWidth onClick={() => setShowOrderModal(true)} className="py-4 text-lg shadow-xl shadow-brown-900/20">
+                ⚡ Buy Now
+              </Button>
+            </div>
+            <Button variant="whatsapp" fullWidth onClick={handleWhatsApp} className="py-4 text-lg shadow-xl shadow-green-500/30 animate-pulse-slow">
+              <Icons.WhatsApp className="w-6 h-6 mr-2" /> {settings.whatsappButtonLabel}
+            </Button>
+          </div>
+          
+          <div className="mt-8 flex justify-between items-center px-4 py-4 border-t border-gray-100 text-xs text-gray-500 font-mukta font-medium">
+            <div className="flex flex-col items-center"><Icons.Shield className="w-5 h-5 mb-1 text-gray-400" /> Secure Checkout</div>
+            <div className="flex flex-col items-center"><span className="text-xl mb-1">🔄</span> Easy Returns</div>
+            <div className="flex flex-col items-center"><span className="text-xl mb-1">🇮🇳</span> Made in India</div>
+          </div>
+
+          {/* Product Reviews Section added here */}
+          <ReviewSection product={p} />
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// SECTION 13: CHECKOUT / ORDER FLOW
+// ==========================================
+
+const OrderConfirmModal = ({ product, qty, onClose }) => {
+  const { user, navigate, showToast, placeOrderDirect } = useContext(AppContext);
+  const [loading, setLoading] = useState(false);
+  const [successMode, setSuccessMode] = useState(false);
+  const [orderRef, setOrderRef] = useState(null);
+  const [payMode, setPayMode] = useState(product.cod ? 'cod' : 'online');
+
+  // If not logged in, force login first
+  useEffect(() => {
+    if (!user) {
+      showToast('warning', 'Please login to place an order');
+      navigate('LOGIN');
+      onClose();
+    }
+  }, [user]);
+
+  if (!user) return null;
+
+  const baseTotal = product.price * qty;
+  const onlineDiscountTotal = (product.onlineDiscount || 0) * qty;
+  const isOnline = payMode === 'online';
+  const total = isOnline ? baseTotal - onlineDiscountTotal : baseTotal;
+
+  const handleConfirm = () => {
+    setLoading(true);
+    // Simulated payment gateway redirect if online
+    if (isOnline) {
+      showToast('info', 'Redirecting to secure payment gateway...');
+    }
+    
+    setTimeout(() => {
+      const order = placeOrderDirect(product, qty, 'website', isOnline ? 'Prepaid (Online)' : 'Cash on Delivery');
+      // If there was an online discount applied, save it in the order details
+      if (isOnline && onlineDiscountTotal > 0) {
+        order.onlineDiscountApplied = onlineDiscountTotal;
+      }
+      setOrderRef(order);
+      setSuccessMode(true);
+      setLoading(false);
+      showToast('success', 'Order placed successfully! 🎉');
+    }, isOnline ? 2500 : 1200);
+  };
+
+  if (successMode && orderRef) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl scale-in">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce-slow">
+            <Icons.Check className="w-10 h-10 text-green-500" />
+          </div>
+          <h2 className="text-2xl font-playfair font-bold text-gray-900 mb-2">Order Placed! 🎉</h2>
+          <p className="text-gray-500 font-mukta mb-6">Your order is confirmed and is being prepared.</p>
+          
+          <div className="bg-gray-50 rounded-xl p-4 text-left mb-6 border border-gray-100">
+            <p className="text-xs text-gray-500 uppercase font-bold tracking-wider mb-1">Order Number</p>
+            <p className="font-bold text-gray-900 font-mono mb-3">{orderRef.orderNumber}</p>
+            
+            <p className="text-xs text-gray-500 uppercase font-bold tracking-wider mb-1">Delivery Estimate</p>
+            <p className="font-bold text-gray-900 font-mukta">4-5 Business Days</p>
+          </div>
+
+          <div className="space-y-3">
+            <Button fullWidth onClick={() => { onClose(); navigate('ORDERS'); }}>Track Order</Button>
+            <Button fullWidth variant="outline" onClick={() => { onClose(); navigate('HOME'); }}>Continue Shopping</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center items-center bg-gray-900/60 backdrop-blur-sm p-0 md:p-4 animate-fade-in">
+      <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden slide-up md:scale-in flex flex-col max-h-[90vh]">
+        
+        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 sticky top-0">
+          <h2 className="font-playfair font-bold text-xl text-gray-900">Confirm Order</h2>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 transition-colors">✕</button>
+        </div>
+
+        <div className="p-6 overflow-y-auto">
+          {/* Product Summary */}
+          <div className="flex gap-4 mb-6 pb-6 border-b border-gray-100">
+            <img src={product.images[0]} alt={product.name} className="w-20 h-20 rounded-xl object-cover border border-gray-200" />
+            <div className="flex-1">
+              <h3 className="font-bold text-gray-900 leading-tight line-clamp-2">{product.name}</h3>
+              <p className="text-sm text-gray-500 mt-1">Qty: {qty} × {formatPrice(product.price)}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="font-bold text-[#FF6B00] text-lg">{formatPrice(total)}</p>
+                {isOnline && onlineDiscountTotal > 0 && (
+                   <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">Saved {formatPrice(onlineDiscountTotal)}</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Delivery Address */}
+          <div className="mb-6 pb-6 border-b border-gray-100">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-gray-900 font-mukta">Delivery Address</h3>
+              <button onClick={() => { onClose(); navigate('PROFILE'); }} className="text-sm text-[#FF6B00] font-bold">Change</button>
+            </div>
+            <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+              <p className="font-bold text-gray-800 mb-1">{user.name}</p>
+              <p className="text-sm text-gray-600 font-mukta leading-relaxed">
+                {user.address.street}<br/>
+                {user.address.landmark && <>{user.address.landmark}<br/></>}
+                {user.address.city}, {user.address.state} - {user.address.pincode}
+              </p>
+              <p className="text-sm text-gray-600 mt-2 font-bold flex items-center">
+                📞 +91 {user.phone}
+              </p>
+            </div>
+          </div>
+
+          {/* Payment Method */}
+          <div>
+            <h3 className="font-bold text-gray-900 font-mukta mb-3">Payment Method</h3>
+            <div className="space-y-3">
+              {/* Pay Online Option */}
+              <div 
+                onClick={() => setPayMode('online')}
+                className={`flex items-center p-4 rounded-xl border cursor-pointer transition-all ${isOnline ? 'border-purple-500 bg-purple-50/50 shadow-md' : 'border-gray-200 bg-gray-50 hover:bg-white'}`}
+              >
+                <input type="radio" checked={isOnline} readOnly className="mr-3 w-4 h-4 accent-purple-600" />
+                <div className="flex-1">
+                  <p className={`font-bold ${isOnline ? 'text-purple-800' : 'text-gray-800'}`}>Pay Online (UPI, Cards)</p>
+                  {(product.onlineDiscount || 0) > 0 && (
+                    <p className="text-xs font-bold text-green-600 mt-0.5">Extra {formatPrice(product.onlineDiscount)} OFF per item 🌟</p>
+                  )}
+                </div>
+                <span className="text-2xl">💳</span>
+              </div>
+
+              {/* COD Option */}
+              {product.cod && (
+                <div 
+                  onClick={() => setPayMode('cod')}
+                  className={`flex items-center p-4 rounded-xl border cursor-pointer transition-all ${!isOnline ? 'border-[#FF6B00] bg-orange-50 shadow-md' : 'border-gray-200 bg-gray-50 hover:bg-white'}`}
+                >
+                  <input type="radio" checked={!isOnline} readOnly className="mr-3 w-4 h-4 accent-[#FF6B00]" />
+                  <div className="flex-1">
+                    <p className={`font-bold ${!isOnline ? 'text-gray-900' : 'text-gray-800'}`}>Cash on Delivery (COD)</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Pay when order arrives</p>
+                  </div>
+                  <span className="text-2xl">💵</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="p-4 bg-white border-t border-gray-100 sticky bottom-0 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
+          <div className="flex justify-between items-end mb-4 px-2">
+            <span className="text-gray-500 font-bold">Total Payable</span>
+            <div className="text-right">
+               {isOnline && onlineDiscountTotal > 0 && <p className="text-xs text-gray-400 line-through mb-0.5">{formatPrice(baseTotal)}</p>}
+               <span className="text-2xl font-bold text-gray-900">{formatPrice(total)}</span>
+            </div>
+          </div>
+          <button 
+            onClick={handleConfirm} 
+            disabled={loading} 
+            className={`w-full font-mukta font-bold rounded-xl py-4 text-lg transition-all duration-300 shadow-lg flex justify-center items-center text-white
+              ${loading ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'}
+              ${isOnline ? 'animate-pay-online hover:shadow-purple-500/50 border border-purple-400/50' : 'bg-gradient-to-r from-[#FF6B00] via-[#FF8C00] to-[#EA580C] hover:shadow-orange-500/40'}
+            `}
+          >
+            {loading ? (
+              <span className="animate-pulse">Processing...</span>
+            ) : isOnline ? (
+              <>⚡ Pay Securely & Confirm</>
+            ) : (
+              <>Confirm & Place Order</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// SECTION 13.5: CART VIEW & CHECKOUT
+// ==========================================
+
+const CartCheckoutModal = ({ onClose }) => {
+  const { user, navigate, showToast, placeOrderDirect, cart, clearCart } = useContext(AppContext);
+  const [loading, setLoading] = useState(false);
+  const [successMode, setSuccessMode] = useState(false);
+  
+  // Calculate if any items DO NOT support COD. If so, COD is not allowed.
+  const isCodAllowed = cart.every(item => item.product.cod);
+  const [payMode, setPayMode] = useState(isCodAllowed ? 'cod' : 'online');
+
+  const baseTotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+  const onlineDiscountTotal = cart.reduce((sum, item) => sum + ((item.product.onlineDiscount || 0) * item.quantity), 0);
+  
+  const isOnline = payMode === 'online';
+  const total = isOnline ? baseTotal - onlineDiscountTotal : baseTotal;
+
+  const handleConfirm = () => {
+    setLoading(true);
+    if (isOnline) {
+      showToast('info', 'Redirecting to secure payment gateway...');
+    }
+    setTimeout(() => {
+      // Create orders for all cart items
+      cart.forEach(item => {
+        const order = placeOrderDirect(item.product, item.quantity, 'website_cart', isOnline ? 'Prepaid (Online)' : 'Cash on Delivery');
+        if (isOnline && (item.product.onlineDiscount || 0) > 0) {
+          order.onlineDiscountApplied = (item.product.onlineDiscount || 0) * item.quantity;
+        }
+      });
+      clearCart();
+      setSuccessMode(true);
+      setLoading(false);
+      showToast('success', 'Cart orders placed successfully! 🎉');
+    }, isOnline ? 2500 : 1500);
+  };
+
+  if (successMode) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl scale-in">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce-slow">
+            <Icons.Check className="w-10 h-10 text-green-500" />
+          </div>
+          <h2 className="text-2xl font-playfair font-bold text-gray-900 mb-2">Order Placed! 🎉</h2>
+          <p className="text-gray-500 font-mukta mb-6">Sabhi items ka order confirm ho gaya hai.</p>
+          
+          <div className="space-y-3">
+            <Button fullWidth onClick={() => { onClose(); navigate('ORDERS'); }}>Track Orders</Button>
+            <Button fullWidth variant="outline" onClick={() => { onClose(); navigate('HOME'); }}>Continue Shopping</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center items-center bg-gray-900/60 backdrop-blur-sm p-0 md:p-4 animate-fade-in">
+      <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden slide-up md:scale-in flex flex-col max-h-[90vh]">
+        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 sticky top-0">
+          <h2 className="font-playfair font-bold text-xl text-gray-900">Checkout Cart</h2>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 transition-colors">✕</button>
+        </div>
+
+        <div className="p-6 overflow-y-auto">
+          <h3 className="font-bold text-gray-900 mb-3">Order Summary ({cart.length} items)</h3>
+          <div className="mb-6 pb-6 border-b border-gray-100 space-y-3">
+            {cart.map(item => (
+              <div key={item.id} className="flex justify-between items-center text-sm font-mukta">
+                <span className="text-gray-600 truncate mr-4">{item.product.name} (x{item.quantity})</span>
+                <span className="font-bold text-gray-900">{formatPrice(item.product.price * item.quantity)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mb-6 pb-6 border-b border-gray-100">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-gray-900 font-mukta">Delivery Address</h3>
+              <button onClick={() => { onClose(); navigate('PROFILE'); }} className="text-sm text-[#FF6B00] font-bold">Change</button>
+            </div>
+            <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+              <p className="font-bold text-gray-800 mb-1">{user.name}</p>
+              <p className="text-sm text-gray-600 font-mukta leading-relaxed">
+                {user.address?.street}<br/>
+                {user.address?.city}, {user.address?.state} - {user.address?.pincode}
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-gray-900 font-mukta mb-3">Payment Method</h3>
+            <div className="space-y-3">
+              {/* Pay Online Option */}
+              <div 
+                onClick={() => setPayMode('online')}
+                className={`flex items-center p-4 rounded-xl border cursor-pointer transition-all ${isOnline ? 'border-purple-500 bg-purple-50/50 shadow-md' : 'border-gray-200 bg-gray-50 hover:bg-white'}`}
+              >
+                <input type="radio" checked={isOnline} readOnly className="mr-3 w-4 h-4 accent-purple-600" />
+                <div className="flex-1">
+                  <p className={`font-bold ${isOnline ? 'text-purple-800' : 'text-gray-800'}`}>Pay Online (UPI, Cards)</p>
+                  {onlineDiscountTotal > 0 && (
+                    <p className="text-xs font-bold text-green-600 mt-0.5">Extra {formatPrice(onlineDiscountTotal)} Total OFF! 🌟</p>
+                  )}
+                </div>
+                <span className="text-2xl">💳</span>
+              </div>
+
+              {/* COD Option */}
+              {isCodAllowed ? (
+                <div 
+                  onClick={() => setPayMode('cod')}
+                  className={`flex items-center p-4 rounded-xl border cursor-pointer transition-all ${!isOnline ? 'border-[#FF6B00] bg-orange-50 shadow-md' : 'border-gray-200 bg-gray-50 hover:bg-white'}`}
+                >
+                  <input type="radio" checked={!isOnline} readOnly className="mr-3 w-4 h-4 accent-[#FF6B00]" />
+                  <div className="flex-1">
+                    <p className={`font-bold ${!isOnline ? 'text-gray-900' : 'text-gray-800'}`}>Cash on Delivery (COD)</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Pay when order arrives</p>
+                  </div>
+                  <span className="text-2xl">💵</span>
+                </div>
+              ) : (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+                  <p className="text-xs text-red-600 font-bold">⚠️ Cash on Delivery is not available for one or more items in your cart.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 bg-white border-t border-gray-100 sticky bottom-0 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
+          <div className="flex justify-between items-end mb-4 px-2">
+            <span className="text-gray-500 font-bold">Total Payable</span>
+            <div className="text-right">
+               {isOnline && onlineDiscountTotal > 0 && <p className="text-xs text-gray-400 line-through mb-0.5">{formatPrice(baseTotal)}</p>}
+               <span className="text-2xl font-bold text-[#FF6B00]">{formatPrice(total)}</span>
+            </div>
+          </div>
+          <button 
+            onClick={handleConfirm} 
+            disabled={loading} 
+            className={`w-full font-mukta font-bold rounded-xl py-4 text-lg transition-all duration-300 shadow-lg flex justify-center items-center text-white
+              ${loading ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'}
+              ${isOnline ? 'animate-pay-online hover:shadow-purple-500/50 border border-purple-400/50' : 'bg-gradient-to-r from-[#FF6B00] via-[#FF8C00] to-[#EA580C] hover:shadow-orange-500/40'}
+            `}
+          >
+            {loading ? <span className="animate-pulse">Processing...</span> : (isOnline ? "⚡ Pay Securely & Confirm" : "Place Order for All Items")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CartView = () => {
+  const { cart, navigate, updateCartQty, removeFromCart, user, showToast } = useContext(AppContext);
+  const [showCheckout, setShowCheckout] = useState(false);
+
+  const totalAmount = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+
+  if (cart.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#FDF8F0] pt-24 pb-24 px-4 flex flex-col items-center justify-center">
+        <div className="w-32 h-32 bg-orange-100 rounded-full flex items-center justify-center mb-6">
+          <Icons.Cart className="w-16 h-16 text-orange-400" />
+        </div>
+        <h2 className="text-3xl font-playfair font-bold text-gray-900 mb-2">Aapka Cart Khali Hai</h2>
+        <p className="text-gray-500 font-mukta mb-8 text-center">Naye aur behtareen products explore karein!</p>
+        <Button onClick={() => navigate('HOME')} className="px-8">Start Shopping</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#FDF8F0] pt-20 pb-32 px-4">
+      {showCheckout && <CartCheckoutModal onClose={() => setShowCheckout(false)} />}
+      <div className="max-w-4xl mx-auto">
+        <h2 className="text-3xl font-playfair font-bold text-gray-900 mb-6">Shopping Cart</h2>
+        
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-4 md:p-6 mb-6 space-y-6">
+          {cart.map(item => (
+            <div key={item.id} className="flex gap-4 items-center pb-6 border-b border-gray-50 last:border-0 last:pb-0">
+              <img src={item.product.images[0]} alt={item.product.name} className="w-24 h-24 rounded-xl object-cover border border-gray-100" />
+              <div className="flex-1">
+                <h3 className="font-bold text-gray-900 leading-tight line-clamp-2 mb-1">{item.product.name}</h3>
+                <p className="font-bold text-[#FF6B00] mb-3">{formatPrice(item.product.price)}</p>
+                
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center border-2 border-gray-200 rounded-lg overflow-hidden h-8 w-24">
+                    <button onClick={() => updateCartQty(item.id, item.quantity - 1)} className="w-8 h-full flex items-center justify-center text-gray-600 hover:bg-gray-100 font-bold bg-white">-</button>
+                    <div className="w-8 h-full flex items-center justify-center font-bold text-sm bg-gray-50 border-x-2 border-gray-200">{item.quantity}</div>
+                    <button onClick={() => updateCartQty(item.id, Math.min(item.product.stock, item.quantity + 1))} className="w-8 h-full flex items-center justify-center text-gray-600 hover:bg-gray-100 font-bold bg-white">+</button>
+                  </div>
+                  <button onClick={() => removeFromCart(item.id)} className="text-xs text-red-500 font-bold hover:underline bg-red-50 px-2 py-1 rounded">Remove</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <span className="text-gray-600 font-bold font-mukta">Total Items:</span>
+            <span className="font-bold text-gray-900">{cart.length}</span>
+          </div>
+          <div className="flex justify-between items-center border-t border-gray-100 pt-4 mb-6">
+            <span className="text-xl font-bold text-gray-900 font-playfair">Grand Total:</span>
+            <span className="text-3xl font-bold text-[#FF6B00]">{formatPrice(totalAmount)}</span>
+          </div>
+          <Button fullWidth onClick={() => {
+            if(!user) {
+              showToast('warning', 'Checkout karne ke liye login karein');
+              navigate('LOGIN');
+            } else {
+              setShowCheckout(true);
+            }
+          }} className="py-4 text-lg">Proceed to Checkout</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// SECTION 14: MY ORDERS & PROFILE
+// ==========================================
+
+const TRACKING_STEPS = ['Pending', 'Shipped', 'In your town/village', 'Arriving Today', 'Out for Delivery', 'Delivered'];
+
+const OrdersView = () => {
+  const { user, orders } = useContext(AppContext);
+  const myOrders = orders.filter(o => o.userId === user?.id).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  return (
+    <div className="min-h-screen bg-[#FDF8F0] pt-20 pb-24 px-4">
+      <div className="max-w-4xl mx-auto">
+        <h2 className="text-3xl font-playfair font-bold text-gray-900 mb-6">My Orders</h2>
+        
+        {myOrders.length === 0 ? (
+          <div className="bg-white rounded-3xl p-10 text-center shadow-sm border border-gray-100">
+            <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Icons.List className="w-10 h-10 text-gray-300" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">No orders yet</h3>
+            <p className="text-gray-500 mb-6 font-mukta">Looks like you haven't placed any orders.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {myOrders.map(order => {
+              const currentStepIndex = TRACKING_STEPS.indexOf(order.status) !== -1 ? TRACKING_STEPS.indexOf(order.status) : 0;
+              
+              return (
+              <div key={order.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col">
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                  <img src={order.product.image} alt={order.product.name} className="w-20 h-20 rounded-xl object-cover border border-gray-100" />
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start mb-1">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{order.orderNumber}</p>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
+                        order.status === 'Delivered' ? 'bg-green-100 text-green-800' : 
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {order.status}
+                      </span>
+                    </div>
+                    <h3 className="font-bold text-gray-900 leading-tight mb-1">{order.product.name}</h3>
+                    <p className="text-sm text-gray-500 font-mukta mb-2">Qty: {order.product.quantity} • {order.paymentMethod}</p>
+                    <p className="text-xs text-gray-400 font-mukta">Placed on {formatDate(order.createdAt)}</p>
+                  </div>
+                  <div className="text-right w-full md:w-auto flex md:flex-col justify-between items-center md:items-end mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-0 border-gray-100">
+                    <p className="font-bold text-lg text-gray-900">{formatPrice(order.totalAmount)}</p>
+                    {order.onlineDiscountApplied && (
+                      <p className="text-xs text-green-600 font-bold bg-green-50 px-2 py-1 rounded mt-1">Saved {formatPrice(order.onlineDiscountApplied)} online</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Progress Tracking Bar */}
+                <div className="w-full mt-6 pt-5 border-t border-gray-50 overflow-x-auto hide-scrollbar pb-2">
+                  <div className="flex items-center min-w-[600px] px-2 relative">
+                    {TRACKING_STEPS.map((step, idx) => {
+                      const isCompleted = idx <= currentStepIndex;
+                      const isCurrent = idx === currentStepIndex;
+                      return (
+                        <div key={step} className="flex-1 relative flex flex-col items-center">
+                          {/* Connecting Line */}
+                          {idx !== 0 && (
+                            <div className={`absolute top-3 right-1/2 w-full h-[3px] -z-10 ${isCompleted ? 'bg-green-500' : 'bg-gray-200'}`}></div>
+                          )}
+                          
+                          {/* Dot */}
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 z-10 bg-white
+                            ${isCompleted ? 'border-green-500 text-green-500' : 'border-gray-300'}
+                            ${isCurrent ? 'shadow-[0_0_0_4px_rgba(34,197,94,0.2)]' : ''}
+                          `}>
+                            {isCompleted ? <Icons.Check className="w-3 h-3" /> : <div className="w-2 h-2 rounded-full bg-gray-300"></div>}
+                          </div>
+                          
+                          {/* Label */}
+                          <span className={`text-[10px] mt-2 text-center leading-tight max-w-[80px] ${isCompleted ? 'text-gray-800 font-bold' : 'text-gray-400 font-medium'}`}>
+                            {step}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+              </div>
+            )})}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ProfileView = () => {
+  const { user, settings, logout, navigate, showToast } = useContext(AppContext);
+
+  if (!user) {
+    // Agar bina login koi profile pe aaye to login pe bhej do
+    setTimeout(() => navigate('LOGIN'), 0);
+    return null;
+  }
+
+  const handleWhatsAppSupport = () => {
+    const text = encodeURIComponent(`Namaste! 🙏\nMujhe apni profile aur orders ke regarding help chahiye.\nEmail: ${user.email}`);
+    window.open(`https://wa.me/${settings.whatsappNumber}?text=${text}`, '_blank');
+  };
+
+  const handleAppSupport = () => {
+    showToast('success', 'Aapki request support team ko bhej di gayi hai. Hum 24 ghante me aapse sampark karenge! 🎧');
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FDF8F0] pt-20 pb-24 px-4">
+      <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
+        <h2 className="text-3xl font-playfair font-bold text-gray-900 mb-6">My Profile</h2>
+
+        {/* Premium Profile Card */}
+        <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 flex flex-col md:flex-row gap-6 items-center md:items-start relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-orange-100 to-amber-50"></div>
+          <div className="relative w-28 h-28 bg-gradient-to-br from-[#FF6B00] to-[#EA580C] rounded-full flex items-center justify-center text-white text-5xl font-bold shadow-xl border-4 border-white">
+            {user.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="relative flex-1 text-center md:text-left mt-2 md:mt-8">
+            <h3 className="text-2xl font-bold text-gray-900 font-playfair">{user.name}</h3>
+            <p className="text-gray-500 font-mukta mt-1 text-lg">{user.email}</p>
+            <div className="inline-flex items-center gap-2 mt-3 bg-gray-50 px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
+              <span className="text-gray-700 font-bold font-mukta tracking-wider">+91 {user.phone}</span>
+              <Icons.Check className="w-4 h-4 text-green-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* Address Card */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-bold text-gray-900 mb-4 border-b border-gray-50 pb-3 flex items-center">
+            <Icons.Home className="w-5 h-5 mr-2 text-[#FF6B00]" /> Saved Delivery Address
+          </h3>
+          <div className="bg-orange-50/50 p-5 rounded-2xl border border-orange-100">
+            <p className="text-base text-gray-700 font-mukta leading-relaxed">
+              {user.address?.street}<br/>
+              {user.address?.landmark && <><span className="text-gray-500 text-sm">Landmark:</span> {user.address.landmark}<br/></>}
+              {user.address?.city}, {user.address?.state} - <span className="font-bold">{user.address?.pincode}</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Support Card */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center">
+            <span className="text-2xl mr-2">🎧</span> Customer Support & Help
+          </h3>
+          <p className="text-sm text-gray-500 font-mukta mb-6 border-b border-gray-50 pb-4">
+            Kya aapko order me koi problem hai ya address change karna hai? Humari support team aapki madad ke liye hamesha taiyar hai.
+          </p>
+          
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Button variant="whatsapp" fullWidth onClick={handleWhatsAppSupport} className="py-4 shadow-green-500/20 text-base">
+              <Icons.WhatsApp className="w-6 h-6 mr-2" /> Chat on WhatsApp
+            </Button>
+            
+            <Button variant="secondary" fullWidth onClick={handleAppSupport} className="py-4 text-base">
+              ✉️ Request Call Back
+            </Button>
+          </div>
+        </div>
+
+        {/* Logout Actions */}
+        <div className="pt-4">
+          <Button variant="outline" fullWidth onClick={() => { logout(); navigate('HOME'); }} className="text-red-500 border-red-200 hover:bg-red-50 py-4 hover:border-red-300">
+            Logout from Account
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// SECTION 14.5: FULL ADMIN DASHBOARD & CHAT
+// ==========================================
+
+const ChatWidget = () => {
+  const { user, chats, setChats, settings } = useContext(AppContext);
+  const [isOpen, setIsOpen] = useState(false);
+  const [message, setMessage] = useState('');
+  const chatEndRef = useRef(null);
+
+  // Identify user or create unique guest ID
+  const currentUserId = user ? user.id : 'guest_' + (store.get('rote_guest_id') || Math.random().toString(36).substr(2, 9));
+  const currentUserName = user ? user.name : 'Guest User';
+
+  useEffect(() => {
+    if (!user && !store.get('rote_guest_id')) store.set('rote_guest_id', currentUserId.replace('guest_', ''));
+  }, [user]);
+
+  useEffect(() => {
+    const handleOpen = () => setIsOpen(true);
+    window.addEventListener('open-chat', handleOpen);
+    return () => window.removeEventListener('open-chat', handleOpen);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [isOpen, chats]);
+
+  const activeChat = chats.find(c => c.userId === currentUserId) || { messages: [] };
+
+  const sendMessage = (e) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+
+    let updatedChats = [...chats];
+    let chatIndex = updatedChats.findIndex(c => c.userId === currentUserId);
+
+    const newMessage = {
+      id: generateId(),
+      sender: 'user',
+      text: message,
+      timestamp: new Date().toISOString()
+    };
+
+    if (chatIndex >= 0) {
+      updatedChats[chatIndex].messages.push(newMessage);
+      updatedChats[chatIndex].updatedAt = new Date().toISOString();
+      updatedChats[chatIndex].userName = currentUserName; 
+    } else {
+      updatedChats.push({
+        id: generateId(),
+        userId: currentUserId,
+        userName: currentUserName,
+        messages: [newMessage],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    setChats(updatedChats);
+    store.set('rote_chats', updatedChats);
+    setMessage('');
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 w-[340px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-gray-200 z-[100] flex flex-col h-[450px] animate-slide-up overflow-hidden">
+      <div className="bg-gradient-to-r from-[#FF6B00] to-[#EA580C] p-4 flex justify-between items-center text-white shrink-0 shadow-md">
+        <div className="flex items-center gap-2">
+          <Icons.Chat className="w-5 h-5" />
+          <div>
+            <h3 className="font-bold font-mukta leading-none">Support Chat</h3>
+            <span className="text-[10px] text-white/80">We reply instantly!</span>
+          </div>
+        </div>
+        <button onClick={() => setIsOpen(false)} className="hover:bg-white/20 p-1.5 rounded-full transition-colors text-lg leading-none">✕</button>
+      </div>
+      
+      <div className="flex-1 p-4 overflow-y-auto bg-gray-50 flex flex-col gap-3 font-mukta text-sm hide-scrollbar">
+        <div className="bg-orange-100 text-orange-800 p-3 rounded-xl rounded-tl-none self-start max-w-[85%] border border-orange-200 shadow-sm">
+          {settings.chatWelcomeMessage || "Namaste! 🙏 Kya main aapki koi madad kar sakta hu?"}
+        </div>
+        {activeChat.messages.map(msg => (
+          <div key={msg.id} className={`p-3 rounded-xl max-w-[85%] border shadow-sm ${msg.sender === 'user' ? 'bg-[#FF6B00] text-white rounded-tr-none self-end border-[#EA580C]' : 'bg-white text-gray-800 rounded-tl-none self-start border-gray-200'}`}>
+            {msg.text}
+            <div className={`text-[9px] mt-1 text-right ${msg.sender === 'user' ? 'text-white/70' : 'text-gray-400'}`}>
+              {formatDate(msg.timestamp).split(', ')[1]}
+            </div>
+          </div>
+        ))}
+        <div ref={chatEndRef} />
+      </div>
+
+      <form onSubmit={sendMessage} className="p-3 bg-white border-t border-gray-100 flex gap-2 shrink-0">
+        <input 
+          type="text" 
+          value={message} 
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Type a message..." 
+          className="flex-1 bg-gray-100 rounded-full px-4 py-2 outline-none focus:ring-2 focus:ring-[#FF6B00]/50 font-mukta text-sm"
+        />
+        <button type="submit" disabled={!message.trim()} className="bg-[#FF6B00] text-white p-2.5 rounded-full disabled:opacity-50 hover:bg-[#EA580C] transition-colors shadow-md">
+          <Icons.Send className="w-5 h-5" />
+        </button>
+      </form>
+    </div>
+  );
+};
+
+const AdminDashboardView = () => {
+  const { orders, setOrders, products, setProducts, settings, setSettings, logout, navigate, showToast, chats, setChats } = useContext(AppContext);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [editSettings, setEditSettings] = useState(settings);
+  
+  // New states for users and products management
+  const [users, setUsers] = useState([]);
+  const [editingProduct, setEditingProduct] = useState(null);
+  
+  // Chat admin state
+  const [selectedChatId, setSelectedChatId] = useState(null);
+  const [adminReply, setAdminReply] = useState('');
+  const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    // Load registered users from local storage
+    setUsers(store.get('rote_users', []));
+  }, []);
+
+  // Auto-scroll admin chat
+  useEffect(() => {
+    if (activeTab === 'chats' && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [activeTab, selectedChatId, chats]);
+
+  const handleSaveSettings = () => {
+    setSettings(editSettings);
+    store.set('rote_settings', editSettings);
+    showToast('success', 'Store settings updated! Logo & name changed successfully.');
+  };
+
+  const updateOrderStatus = (id, status) => {
+    const updated = orders.map(o => o.id === id ? { ...o, status } : o);
+    setOrders(updated);
+    store.set('rote_orders', updated);
+    showToast('success', `Order marked as ${status}`);
+  };
+
+  const handleAdminReply = (e) => {
+    e.preventDefault();
+    if (!adminReply.trim() || !selectedChatId) return;
+
+    let updatedChats = [...chats];
+    let chatIndex = updatedChats.findIndex(c => c.id === selectedChatId);
+    
+    if (chatIndex >= 0) {
+      updatedChats[chatIndex].messages.push({
+        id: generateId(),
+        sender: 'admin',
+        text: adminReply,
+        timestamp: new Date().toISOString()
+      });
+      updatedChats[chatIndex].updatedAt = new Date().toISOString();
+      setChats(updatedChats);
+      store.set('rote_chats', updatedChats);
+      setAdminReply('');
+    }
+  };
+
+  const handleDeleteChat = () => {
+    if (window.confirm('Kya aap sach me is chat ko hamesha ke liye delete karna chahte hain?')) {
+      const updatedChats = chats.filter(c => c.id !== selectedChatId);
+      setChats(updatedChats);
+      store.set('rote_chats', updatedChats);
+      setSelectedChatId(null);
+      showToast('success', 'Chat delete ho gayi!');
+    }
+  };
+
+  const handleDownloadChat = () => {
+    const chatToSave = chats.find(c => c.id === selectedChatId);
+    if (!chatToSave) return;
+    
+    let textContent = `Chat History: ${chatToSave.userName}\nDate: ${new Date().toLocaleString()}\n\n`;
+    chatToSave.messages.forEach(msg => {
+      textContent += `[${formatDate(msg.timestamp).split(', ')[1]}] ${msg.sender.toUpperCase()}: ${msg.text}\n`;
+    });
+
+    const blob = new Blob([textContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Chat_${chatToSave.userName.replace(/\s+/g, '_')}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('success', 'Chat aapke device me save ho gayi!');
+  };
+
+  const handleSaveProduct = (e) => {
+    e.preventDefault();
+    let updatedProducts;
+    if (!editingProduct.id) {
+      // Create New Product
+      const newProduct = {
+        ...editingProduct,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        price: Number(editingProduct.price),
+        originalPrice: Number(editingProduct.originalPrice),
+        stock: Number(editingProduct.stock),
+        rating: 5.0,
+        reviewCount: 0,
+        sold: 0,
+        isPremium: Boolean(editingProduct.isPremium),
+        sevenDayReplace: Boolean(editingProduct.sevenDayReplace),
+        noReplaceReason: editingProduct.noReplaceReason || '',
+        tags: typeof editingProduct.tags === 'string' ? editingProduct.tags.split(',').map(t => t.trim()) : editingProduct.tags
+      };
+      updatedProducts = [newProduct, ...products];
+      showToast('success', 'New product added successfully!');
+    } else {
+      // Update Existing Product
+      updatedProducts = products.map(p => p.id === editingProduct.id ? {
+        ...editingProduct,
+        price: Number(editingProduct.price),
+        originalPrice: Number(editingProduct.originalPrice),
+        stock: Number(editingProduct.stock),
+        isPremium: Boolean(editingProduct.isPremium),
+        sevenDayReplace: Boolean(editingProduct.sevenDayReplace),
+        noReplaceReason: editingProduct.noReplaceReason || '',
+        tags: typeof editingProduct.tags === 'string' ? editingProduct.tags.split(',').map(t => t.trim()) : editingProduct.tags
+      } : p);
+      showToast('success', 'Product updated successfully!');
+    }
+    setProducts(updatedProducts);
+    store.set('rote_products', updatedProducts);
+    setEditingProduct(null); // Close modal
+  };
+
+  const totalRevenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 1048576) return showToast('error', 'Image size 1MB se kam honi chahiye');
+      const reader = new FileReader();
+      reader.onloadend = () => setEditSettings({...editSettings, logoUrl: reader.result});
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleProductImageUpload = (index, e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 1048576) return showToast('error', 'Image size 1MB se kam honi chahiye');
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const newImages = [...editingProduct.images];
+        newImages[index] = reader.result;
+        setEditingProduct({...editingProduct, images: newImages});
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0F172A] text-white flex flex-col md:flex-row relative z-50">
+      {/* Sidebar */}
+      <div className="w-full md:w-64 bg-[#1E293B] border-r border-gray-800 flex flex-col md:fixed md:h-full">
+        <div className="p-6 border-b border-gray-800 flex justify-between items-center">
+          <h2 className="text-xl font-bold text-[#FCD34D] font-playfair">Admin Panel</h2>
+          <button onClick={() => { logout(); navigate('HOME'); }} className="md:hidden text-red-400 hover:text-red-300 text-sm font-bold bg-red-500/10 px-3 py-1.5 rounded-lg flex items-center">
+            🚪 Exit
+          </button>
+        </div>
+        <nav className="flex-1 p-4 flex md:flex-col space-x-2 md:space-x-0 md:space-y-2 overflow-x-auto hide-scrollbar">
+          <button onClick={() => setActiveTab('dashboard')} className={`flex-shrink-0 text-left px-4 py-3 rounded-xl font-mukta transition-colors ${activeTab === 'dashboard' ? 'bg-[#FF6B00] text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>📊 Dashboard</button>
+          <button onClick={() => setActiveTab('orders')} className={`flex-shrink-0 text-left px-4 py-3 rounded-xl font-mukta transition-colors ${activeTab === 'orders' ? 'bg-[#FF6B00] text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>🛒 Orders ({orders.length})</button>
+          <button onClick={() => setActiveTab('products')} className={`flex-shrink-0 text-left px-4 py-3 rounded-xl font-mukta transition-colors ${activeTab === 'products' ? 'bg-[#FF6B00] text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>📦 Products ({products.length})</button>
+          <button onClick={() => setActiveTab('users')} className={`flex-shrink-0 text-left px-4 py-3 rounded-xl font-mukta transition-colors ${activeTab === 'users' ? 'bg-[#FF6B00] text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>👥 Users ({users.length})</button>
+          <button onClick={() => setActiveTab('chats')} className={`flex-shrink-0 text-left px-4 py-3 rounded-xl font-mukta transition-colors ${activeTab === 'chats' ? 'bg-[#FF6B00] text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'} flex justify-between items-center`}>
+            <span>💬 Live Chats</span>
+            {chats.length > 0 && <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{chats.length}</span>}
+          </button>
+          <button onClick={() => setActiveTab('settings')} className={`flex-shrink-0 text-left px-4 py-3 rounded-xl font-mukta transition-colors ${activeTab === 'settings' ? 'bg-[#FF6B00] text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>⚙️ Settings & Logo</button>
+        </nav>
+        <div className="p-4 border-t border-gray-800 hidden md:block">
+          <button onClick={() => { logout(); navigate('HOME'); }} className="w-full text-left px-4 py-3 rounded-xl font-mukta text-red-400 hover:bg-red-500/10">🚪 Exit Admin</button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto pb-24 md:pb-8">
+        {activeTab === 'dashboard' && (
+          <div className="animate-fade-in">
+            <h3 className="text-3xl font-playfair font-bold mb-8">Store Overview</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-[#1E293B] p-6 rounded-2xl border border-gray-700">
+                <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total Revenue</p>
+                <p className="text-3xl font-bold text-[#16A34A]">{formatPrice(totalRevenue)}</p>
+              </div>
+              <div className="bg-[#1E293B] p-6 rounded-2xl border border-gray-700">
+                <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total Orders</p>
+                <p className="text-3xl font-bold text-[#3B82F6]">{orders.length}</p>
+              </div>
+              <div className="bg-[#1E293B] p-6 rounded-2xl border border-gray-700">
+                <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Active Products</p>
+                <p className="text-3xl font-bold text-[#F59E0B]">{products.length}</p>
+              </div>
+              <div className="bg-[#1E293B] p-6 rounded-2xl border border-gray-700">
+                <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total Users</p>
+                <p className="text-3xl font-bold text-[#A855F7]">{users.length}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'orders' && (
+          <div className="animate-fade-in">
+            <h3 className="text-3xl font-playfair font-bold mb-8">Manage Orders</h3>
+            <div className="bg-[#1E293B] rounded-2xl border border-gray-700 overflow-hidden overflow-x-auto">
+              <table className="w-full text-left text-sm font-mukta min-w-[800px]">
+                <thead className="bg-gray-800 text-gray-400">
+                  <tr>
+                    <th className="p-4">Order ID</th>
+                    <th className="p-4">Customer</th>
+                    <th className="p-4">Product</th>
+                    <th className="p-4">Amount & Payment</th>
+                    <th className="p-4">Tracking Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {orders.length === 0 ? (
+                    <tr><td colSpan="5" className="p-8 text-center text-gray-500">No orders yet.</td></tr>
+                  ) : orders.map(o => (
+                    <tr key={o.id} className="hover:bg-gray-800/50">
+                      <td className="p-4 font-mono text-gray-300">{o.orderNumber}</td>
+                      <td className="p-4">
+                        <p className="font-bold text-white">{o.userName}</p>
+                        <p className="text-xs text-gray-400">+91 {o.userPhone}</p>
+                      </td>
+                      <td className="p-4 text-gray-300">
+                        <div className="flex items-center gap-2">
+                           <img src={o.product.image} className="w-8 h-8 rounded object-cover" />
+                           <span className="truncate max-w-[150px]">{o.product.name} (x{o.product.quantity})</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <p className="text-[#FCD34D] font-bold">{formatPrice(o.totalAmount)}</p>
+                        <p className={`text-[10px] px-1.5 py-0.5 inline-block rounded font-bold mt-1 ${o.paymentMethod.includes('Online') ? 'bg-purple-500/20 text-purple-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                          {o.paymentMethod}
+                        </p>
+                      </td>
+                      <td className="p-4">
+                        <select 
+                          value={o.status}
+                          onChange={(e) => updateOrderStatus(o.id, e.target.value)}
+                          className="bg-gray-700 text-white border border-gray-600 rounded px-2 py-2 text-sm outline-none focus:border-[#FF6B00] w-full"
+                        >
+                          {TRACKING_STEPS.map(step => (
+                            <option key={step} value={step}>{step}</option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-gray-500 mt-1">Updates live on customer's progress bar</p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'products' && (
+          <div className="animate-fade-in">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-3xl font-playfair font-bold">Manage Products</h3>
+              <Button onClick={() => setEditingProduct({
+                id: '', name: '', shortDescription: '', description: '', price: '', originalPrice: '',
+                images: ['', '', ''], category: '', tags: [], freeDelivery: false, cod: true, stock: 10, active: true, isPremium: false, sevenDayReplace: false, noReplaceReason: ''
+              })} className="shadow-lg shadow-[#FF6B00]/20">+ Add Product</Button>
+            </div>
+
+            <div className="bg-[#1E293B] rounded-2xl border border-gray-700 overflow-hidden overflow-x-auto">
+              <table className="w-full text-left text-sm font-mukta min-w-[800px]">
+                <thead className="bg-gray-800 text-gray-400">
+                  <tr>
+                    <th className="p-4">Image</th>
+                    <th className="p-4">Name & Category</th>
+                    <th className="p-4">Price</th>
+                    <th className="p-4">Stock</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {products.map(p => (
+                    <tr key={p.id} className="hover:bg-gray-800/50">
+                      <td className="p-4">
+                        <img src={p.images[0]} alt={p.name} className="w-12 h-12 rounded object-cover border border-gray-600" />
+                      </td>
+                      <td className="p-4">
+                        <p className="font-bold text-white truncate max-w-[200px]">{p.name}</p>
+                        <p className="text-xs text-gray-400">{p.category}</p>
+                      </td>
+                      <td className="p-4 text-[#FCD34D] font-bold">{formatPrice(p.price)}</td>
+                      <td className="p-4 text-gray-300">{p.stock}</td>
+                      <td className="p-4">
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${p.active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {p.active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <button onClick={() => setEditingProduct({...p})} className="text-blue-400 hover:text-blue-300 font-bold px-3 py-1 bg-blue-500/10 rounded">Edit</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'users' && (
+          <div className="animate-fade-in">
+            <h3 className="text-3xl font-playfair font-bold mb-8">Registered Users</h3>
+            <div className="bg-[#1E293B] rounded-2xl border border-gray-700 overflow-hidden overflow-x-auto">
+              <table className="w-full text-left text-sm font-mukta min-w-[800px]">
+                <thead className="bg-gray-800 text-gray-400">
+                  <tr>
+                    <th className="p-4">Name</th>
+                    <th className="p-4">Contact</th>
+                    <th className="p-4">Address</th>
+                    <th className="p-4">Joined Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {users.length === 0 ? (
+                    <tr><td colSpan="4" className="p-8 text-center text-gray-500">No users found.</td></tr>
+                  ) : users.map(u => (
+                    <tr key={u.id} className="hover:bg-gray-800/50">
+                      <td className="p-4 font-bold text-white">{u.name}</td>
+                      <td className="p-4">
+                        <p className="text-gray-300">{u.email}</p>
+                        <p className="text-xs text-gray-400">+91 {u.phone}</p>
+                      </td>
+                      <td className="p-4 text-gray-300 text-xs max-w-[250px]">
+                        {u.address?.street}, {u.address?.city}, {u.address?.state} - {u.address?.pincode}
+                      </td>
+                      <td className="p-4 text-gray-400 text-xs">
+                        {formatDate(u.createdAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'chats' && (
+          <div className="animate-fade-in h-[calc(100vh-100px)] flex flex-col">
+            <h3 className="text-3xl font-playfair font-bold mb-4 shrink-0">Live Customer Chats</h3>
+            
+            <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden min-h-[400px]">
+              {/* Chat List */}
+              <div className="w-full md:w-1/3 bg-[#1E293B] border border-gray-700 rounded-2xl overflow-y-auto hide-scrollbar flex flex-col h-1/3 md:h-full">
+                {chats.length === 0 ? (
+                  <p className="p-6 text-gray-500 text-center font-mukta">No active chats yet.</p>
+                ) : (
+                  chats.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)).map((chat, idx) => (
+                    <div 
+                      key={chat.id} 
+                      onClick={() => setSelectedChatId(chat.id)}
+                      className={`p-4 border-b border-gray-800 cursor-pointer transition-colors ${selectedChatId === chat.id ? 'bg-gray-800 border-l-4 border-l-[#FF6B00]' : 'hover:bg-gray-800/50'}`}
+                    >
+                      <div className="flex justify-between items-start mb-1">
+                        <p className="font-bold text-white truncate pr-2">{chat.userName} {chat.userName.includes('Guest') ? `(${idx+1})` : ''}</p>
+                        <span className="text-[10px] text-gray-500 whitespace-nowrap">{formatDate(chat.updatedAt).split(', ')[1]}</span>
+                      </div>
+                      <p className="text-xs text-gray-400 truncate font-mukta">
+                        {chat.messages.length > 0 ? chat.messages[chat.messages.length - 1].text : 'New Chat'}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Admin Chat Window */}
+              <div className="flex-1 bg-[#1E293B] border border-gray-700 rounded-2xl flex flex-col overflow-hidden h-2/3 md:h-full mt-4 md:mt-0">
+                {!selectedChatId ? (
+                  <div className="flex-1 flex items-center justify-center text-gray-500 font-mukta flex-col">
+                    <Icons.Chat className="w-16 h-16 mb-4 opacity-20" />
+                    Select a customer to start messaging
+                  </div>
+                ) : (
+                  <>
+                    <div className="p-4 border-b border-gray-700 bg-gray-800/50 shrink-0 flex justify-between items-center">
+                      <h4 className="font-bold text-white flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        {chats.find(c => c.id === selectedChatId)?.userName}
+                      </h4>
+                      <div className="flex gap-2">
+                        <button onClick={handleDownloadChat} className="bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1" title="Download & Save Chat">
+                          💾 Save
+                        </button>
+                        <button onClick={handleDeleteChat} className="bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1" title="Delete Chat Forever">
+                          🗑️ Delete
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3 font-mukta bg-[#0F172A] hide-scrollbar">
+                      {chats.find(c => c.id === selectedChatId)?.messages.map(msg => (
+                        <div key={msg.id} className={`max-w-[80%] p-3 rounded-xl border ${msg.sender === 'admin' ? 'bg-[#FF6B00] text-white self-end border-[#EA580C] rounded-tr-none shadow-md' : 'bg-[#1E293B] text-gray-200 self-start border-gray-700 rounded-tl-none shadow-sm'}`}>
+                          {msg.text}
+                          <div className={`text-[10px] mt-1 text-right ${msg.sender === 'admin' ? 'text-white/70' : 'text-gray-500'}`}>
+                            {formatDate(msg.timestamp).split(', ')[1]}
+                          </div>
+                        </div>
+                      ))}
+                      <div ref={chatEndRef} />
+                    </div>
+
+                    <form onSubmit={handleAdminReply} className="p-4 bg-gray-800/50 border-t border-gray-700 flex gap-3 shrink-0">
+                      <input 
+                        type="text" 
+                        value={adminReply} 
+                        onChange={(e) => setAdminReply(e.target.value)}
+                        placeholder="Type your reply to the customer..." 
+                        className="flex-1 bg-gray-900 border border-gray-700 text-white rounded-xl px-4 py-3 outline-none focus:border-[#FF6B00] font-mukta"
+                      />
+                      <Button type="submit" disabled={!adminReply.trim()} className="px-6 rounded-xl shadow-lg shadow-[#FF6B00]/20"><Icons.Send className="w-5 h-5"/></Button>
+                    </form>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="animate-fade-in max-w-2xl">
+            <h3 className="text-3xl font-playfair font-bold mb-8">Store Settings</h3>
+            <div className="bg-[#1E293B] p-6 md:p-8 rounded-2xl border border-gray-700 space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-gray-400 mb-2 font-mukta">Store Name</label>
+                <input type="text" value={editSettings.shopName} onChange={e => setEditSettings({...editSettings, shopName: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2 font-mukta">Store Tagline</label>
+                  <input type="text" value={editSettings.tagline} onChange={e => setEditSettings({...editSettings, tagline: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2 font-mukta">WhatsApp Number (e.g. 919876543210)</label>
+                  <input type="text" value={editSettings.whatsappNumber} onChange={e => setEditSettings({...editSettings, whatsappNumber: e.target.value.replace(/\D/g, '')})} placeholder="919876543210" className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-gray-400 mb-2 font-mukta">Live Chat Welcome Message</label>
+                <input type="text" value={editSettings.chatWelcomeMessage !== undefined ? editSettings.chatWelcomeMessage : "Namaste! 🙏 Kya main aapki koi madad kar sakta hu?"} onChange={e => setEditSettings({...editSettings, chatWelcomeMessage: e.target.value})} placeholder="Type your welcome message..." className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2 font-mukta">Admin Username</label>
+                  <input type="text" value={editSettings.adminUsername} onChange={e => setEditSettings({...editSettings, adminUsername: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2 font-mukta">Admin Password</label>
+                  <input type="text" value={editSettings.adminPassword} onChange={e => setEditSettings({...editSettings, adminPassword: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2 font-mukta">Owner Name ("Made by")</label>
+                  <input type="text" value={editSettings.ownerName} onChange={e => setEditSettings({...editSettings, ownerName: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+                <div className="pb-3">
+                  <label className="flex items-center cursor-pointer text-white">
+                    <input type="checkbox" checked={editSettings.showMadeBy !== false} onChange={e => setEditSettings({...editSettings, showMadeBy: e.target.checked})} className="mr-2 w-5 h-5 accent-[#FF6B00]" />
+                    Show "Made by" Text in Header
+                  </label>
+                </div>
+              </div>
+
+              <div className="p-4 bg-gray-800/50 rounded-xl border border-gray-700">
+                <label className="block text-sm font-bold text-[#FCD34D] mb-4 font-mukta">Logo Image</label>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <label className="cursor-pointer bg-gray-700 hover:bg-gray-600 text-white px-5 py-3 rounded-xl text-sm font-bold transition-colors flex items-center">
+                    <Icons.Camera className="w-5 h-5 mr-2" /> Upload from Gallery
+                    <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+                  </label>
+                  <span className="text-xs text-gray-500">Max size 1MB (JPG/PNG)</span>
+                </div>
+                {editSettings.logoUrl && (
+                  <div className="mt-6 relative inline-block">
+                    <div className="p-3 bg-white rounded-xl shadow-lg border border-gray-200">
+                      <img src={editSettings.logoUrl} alt="Preview" className="h-12 object-contain" />
+                    </div>
+                    <button onClick={() => setEditSettings({...editSettings, logoUrl: ''})} className="absolute -top-3 -right-3 bg-red-500 hover:bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold shadow-md transition-colors">✕</button>
+                  </div>
+                )}
+              </div>
+              <div className="pt-4 border-t border-gray-700 flex justify-between items-center">
+                <button 
+                  onClick={() => {
+                    // Pura HTML document fetch karke usme se script/code nikalna mushkil hai iframe me.
+                    // Isliye ek simple trick: Hum user ko ek alert dikhate hain copy karne ka sahi tarika batane ke liye.
+                    // Ya phir agar koi element me code hai to use copy karwate hain.
+                    showToast('info', 'Code copy karne ke liye: Screen ke upar right side me jo "Copy" icon hai uspar click karein!');
+                  }}
+                  className="text-sm font-bold text-blue-400 hover:text-blue-300 underline bg-blue-500/10 px-4 py-2 rounded-lg"
+                >
+                  📄 How to Copy Code?
+                </button>
+                <Button onClick={handleSaveSettings} className="shadow-lg shadow-[#FF6B00]/20">Save Settings</Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* PRODUCT EDIT/ADD MODAL */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#1E293B] rounded-2xl w-full max-w-3xl shadow-2xl border border-gray-700 my-auto max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-gray-700 flex justify-between items-center bg-[#1E293B] rounded-t-2xl shrink-0">
+              <h2 className="text-2xl font-playfair font-bold text-white">{editingProduct.id ? 'Edit Product' : 'Add New Product'}</h2>
+              <button onClick={() => setEditingProduct(null)} className="text-gray-400 hover:text-white text-2xl">✕</button>
+            </div>
+            <form onSubmit={handleSaveProduct} className="p-6 space-y-6 overflow-y-auto hide-scrollbar flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2">Product Name *</label>
+                  <input required type="text" value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2">Category *</label>
+                  <input required type="text" value={editingProduct.category} onChange={e => setEditingProduct({...editingProduct, category: e.target.value})} placeholder="e.g. Clothing, Pooja Items" className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2">Selling Price (₹) *</label>
+                  <input required type="number" value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2">Original MRP (₹) *</label>
+                  <input required type="number" value={editingProduct.originalPrice} onChange={e => setEditingProduct({...editingProduct, originalPrice: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+                
+                <div className="md:col-span-2 bg-purple-500/10 border border-purple-500/30 p-4 rounded-xl">
+                  <label className="block text-sm font-bold text-purple-300 mb-2">Extra Online Payment Discount (₹) - Leave 0 if none</label>
+                  <input type="number" value={editingProduct.onlineDiscount || ''} onChange={e => setEditingProduct({...editingProduct, onlineDiscount: Number(e.target.value)})} placeholder="e.g. 50" className="w-full bg-gray-900 border border-purple-500/50 rounded-xl px-4 py-3 text-white outline-none focus:border-purple-400" />
+                  <p className="text-xs text-purple-400 mt-1">If set, customers get this extra discount ONLY when they choose "Pay Online".</p>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-gray-400 mb-2">Short Description *</label>
+                  <input required type="text" value={editingProduct.shortDescription} onChange={e => setEditingProduct({...editingProduct, shortDescription: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-gray-400 mb-2">Full Detailed Description *</label>
+                  <textarea required rows={3} value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00] resize-none" />
+                </div>
+
+                <div className="md:col-span-2 space-y-4">
+                  <label className="block text-sm font-bold text-gray-400">Product Images (Gallery Upload)</label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[0, 1, 2].map(idx => (
+                      <div key={idx} className="border-2 border-dashed border-gray-600 rounded-xl p-2 bg-gray-800/50 flex flex-col items-center justify-center relative overflow-hidden h-36 group hover:border-[#FF6B00] transition-colors">
+                        {editingProduct.images[idx] ? (
+                          <>
+                            <img src={editingProduct.images[idx]} alt={`Product ${idx+1}`} className="w-full h-full object-cover rounded-lg" />
+                            <div className="absolute inset-0 bg-black/60 hidden group-hover:flex items-center justify-center gap-3 rounded-lg backdrop-blur-sm transition-all">
+                              <label className="cursor-pointer bg-[#FF6B00] text-white p-2.5 rounded-full hover:bg-orange-600 shadow-lg transform hover:scale-110 transition-all">
+                                <Icons.Camera className="w-5 h-5" />
+                                <input type="file" accept="image/*" onChange={(e) => handleProductImageUpload(idx, e)} className="hidden" />
+                              </label>
+                              <button type="button" onClick={() => {
+                                const newImages = [...editingProduct.images];
+                                newImages[idx] = '';
+                                setEditingProduct({...editingProduct, images: newImages});
+                              }} className="bg-red-500 text-white p-2.5 rounded-full hover:bg-red-600 shadow-lg transform hover:scale-110 transition-all">
+                                ✕
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-gray-400 hover:text-[#FF6B00] transition-colors">
+                            <Icons.Camera className="w-8 h-8 mb-2 opacity-50 group-hover:opacity-100" />
+                            <span className="text-xs font-bold">{idx === 0 ? 'Main Image *' : `Image ${idx+1}`}</span>
+                            <span className="text-[10px] opacity-50 mt-1">Tap to Upload</span>
+                            <input required={idx === 0} type="file" accept="image/*" onChange={(e) => handleProductImageUpload(idx, e)} className="hidden" />
+                          </label>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2">Available Stock *</label>
+                  <input required type="number" value={editingProduct.stock} onChange={e => setEditingProduct({...editingProduct, stock: e.target.value})} className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-2">Tags (Comma separated)</label>
+                  <input type="text" value={Array.isArray(editingProduct.tags) ? editingProduct.tags.join(', ') : editingProduct.tags} onChange={e => setEditingProduct({...editingProduct, tags: e.target.value})} placeholder="e.g. Silk, New, Trending" className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white outline-none focus:border-[#FF6B00]" />
+                </div>
+
+                <div className="md:col-span-2 flex flex-wrap gap-6 bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+                  <label className="flex items-center cursor-pointer text-white">
+                    <input type="checkbox" checked={editingProduct.freeDelivery} onChange={e => setEditingProduct({...editingProduct, freeDelivery: e.target.checked})} className="mr-2 w-5 h-5 accent-[#FF6B00]" />
+                    Free Delivery
+                  </label>
+                  <label className="flex items-center cursor-pointer text-white">
+                    <input type="checkbox" checked={editingProduct.cod} onChange={e => setEditingProduct({...editingProduct, cod: e.target.checked})} className="mr-2 w-5 h-5 accent-[#FF6B00]" />
+                    Cash on Delivery
+                  </label>
+                  <label className="flex items-center cursor-pointer text-white">
+                    <input type="checkbox" checked={editingProduct.sevenDayReplace || false} onChange={e => setEditingProduct({...editingProduct, sevenDayReplace: e.target.checked})} className="mr-2 w-5 h-5 accent-green-500" />
+                    7 Days Replace
+                  </label>
+                  <label className="flex items-center cursor-pointer text-white">
+                    <input type="checkbox" checked={editingProduct.active} onChange={e => setEditingProduct({...editingProduct, active: e.target.checked})} className="mr-2 w-5 h-5 accent-[#FF6B00]" />
+                    Product Active (Visible)
+                  </label>
+                  <label className="flex items-center cursor-pointer text-white">
+                    <input type="checkbox" checked={editingProduct.isPremium || false} onChange={e => setEditingProduct({...editingProduct, isPremium: e.target.checked})} className="mr-2 w-5 h-5 accent-purple-500" />
+                    ✨ Mark as Premium (Rainbow 3D Effect)
+                  </label>
+                </div>
+
+                {!editingProduct.sevenDayReplace && (
+                  <div className="md:col-span-2 mt-2 bg-red-500/10 border border-red-500/30 p-4 rounded-xl">
+                    <label className="block text-sm font-bold text-red-400 mb-2">Reason for No Replacement (Shown to customer)</label>
+                    <input type="text" value={editingProduct.noReplaceReason || ''} onChange={e => setEditingProduct({...editingProduct, noReplaceReason: e.target.value})} placeholder="e.g. Hygiene item, cannot be returned." className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-red-500" />
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-6 border-t border-gray-700 flex justify-end gap-4 shrink-0 bg-[#1E293B] pb-2 mt-6">
+                <Button type="button" variant="outline" onClick={() => setEditingProduct(null)} className="text-gray-300 border-gray-600 hover:bg-gray-800">Cancel</Button>
+                <Button type="submit" className="shadow-lg shadow-[#FF6B00]/20">{editingProduct.id ? 'Save Changes' : 'Add Product'}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+// ==========================================
+// SECTION 15: GLOBAL APP WRAPPER
+// ==========================================
+
+export default function App() {
+  const [currentView, setCurrentView] = useState('HOME'); // HOME, PRODUCT_DETAIL, CART, LOGIN, SIGNUP, PROFILE, ORDERS, ADMIN_DASHBOARD
+  const [user, setUser] = useState(null);
+  const [cart, setCart] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [products, setProducts] = useState(defaultProducts);
+  const [settings, setSettings] = useState(defaultSettings);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [chats, setChats] = useState([]);
+
+  // Init Data
+  useEffect(() => {
+    const savedUser = store.get('rote_current_user', null);
+    if (savedUser) setUser(savedUser);
+    
+    setOrders(store.get('rote_orders', []));
+    setCart(store.get('rote_cart', []));
+    setReviews(store.get('rote_reviews', []));
+    setChats(store.get('rote_chats', []));
+    
+    // Ensure default settings/products if not exist
+    if (!store.get('rote_settings')) store.set('rote_settings', defaultSettings);
+    else setSettings(store.get('rote_settings'));
+    
+    if (!store.get('rote_products')) store.set('rote_products', defaultProducts);
+    else setProducts(store.get('rote_products'));
+    
+    // Initialize empty users array if first run
+    if (!store.get('rote_users')) store.set('rote_users', []);
+  }, []);
+
+  const showToast = useCallback((type, message) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  }, []);
+
+  const login = (userData) => {
+    setUser(userData);
+    store.set('rote_current_user', userData);
+    setCurrentView('HOME');
+  };
+
+  const logout = () => {
+    setUser(null);
+    store.remove('rote_current_user');
+  };
+
+  const placeOrderDirect = (product, quantity, source, paymentMethod = "Cash on Delivery") => {
+    const newOrder = {
+      id: generateId(),
+      orderNumber: "LS" + Math.floor(100000 + Math.random() * 900000), // Changed RS to LS
+      userId: user ? user.id : 'guest',
+      userName: user ? user.name : 'Guest',
+      userEmail: user ? user.email : '',
+      userPhone: user ? user.phone : '',
+      userAddress: user ? user.address : {},
+      product: {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        image: product.images[0],
+        quantity: quantity
+      },
+      totalAmount: product.price * quantity,
+      paymentMethod: paymentMethod,
+      status: "Pending", // initial tracking step
+      statusHistory: [{ status: "Pending", timestamp: new Date().toISOString(), note: "Order placed" }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      source: source
+    };
+
+    const newOrders = [newOrder, ...orders];
+    setOrders(newOrders);
+    store.set('rote_orders', newOrders);
+    return newOrder;
+  };
+
+  const addToCart = (product, qty) => {
+    const existing = cart.find(item => item.product.id === product.id);
+    let newCart;
+    if (existing) {
+      newCart = cart.map(item => item.product.id === product.id ? { ...item, quantity: Math.min(item.product.stock, item.quantity + qty) } : item);
+    } else {
+      newCart = [...cart, { product, quantity: qty, id: generateId() }];
+    }
+    setCart(newCart);
+    store.set('rote_cart', newCart);
+    showToast('success', 'Cart me add ho gaya! 🛒');
+  };
+
+  const updateCartQty = (cartItemId, newQty) => {
+    if (newQty < 1) return;
+    const newCart = cart.map(item => item.id === cartItemId ? { ...item, quantity: newQty } : item);
+    setCart(newCart);
+    store.set('rote_cart', newCart);
+  };
+
+  const removeFromCart = (cartItemId) => {
+    const newCart = cart.filter(item => item.id !== cartItemId);
+    setCart(newCart);
+    store.set('rote_cart', newCart);
+    showToast('info', 'Item cart se hata diya gaya');
+  };
+
+  const clearCart = () => {
+    setCart([]);
+    store.remove('rote_cart');
+  };
+
+  const contextValue = {
+    currentView, navigate: setCurrentView,
+    user, login, logout,
+    cart, setCart, addToCart, updateCartQty, removeFromCart, clearCart,
+    orders, setOrders, placeOrderDirect,
+    products, setProducts, settings, setSettings,
+    selectedProduct, setSelectedProduct,
+    showToast,
+    reviews, setReviews,
+    chats, setChats
+  };
+
+  return (
+    <AppContext.Provider value={contextValue}>
+      <div className="font-mukta text-gray-900 bg-[#FDF8F0] min-h-screen selection:bg-orange-200">
+        <style dangerouslySetInnerHTML={{__html: `
+          @import url('https://fonts.googleapis.com/css2?family=Mukta:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+          
+          .font-playfair { font-family: 'Playfair Display', serif; }
+          .font-mukta { font-family: 'Mukta', sans-serif; }
+          
+          .hide-scrollbar::-webkit-scrollbar { display: none; }
+          .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+          
+          .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+          
+          @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+          .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
+          
+          @keyframes slide-up { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+          .slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+          
+          @keyframes scale-in { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+          .scale-in { animation: scale-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+          @keyframes bounce-slow {
+            0%, 100% { transform: translateY(-5%); }
+            50% { transform: translateY(0); }
+          }
+          .animate-bounce-slow { animation: bounce-slow 3s infinite ease-in-out; }
+
+          @keyframes pulse-slow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: .9; transform: scale(0.98); }
+          }
+          .animate-pulse-slow { animation: pulse-slow 3s infinite ease-in-out; }
+
+          .glow-text {
+            text-shadow: 0 0 20px rgba(255, 107, 0, 0.3);
+          }
+
+          .shimmer-text {
+            background: linear-gradient(90deg, #92400E 0%, #F59E0B 50%, #92400E 100%);
+            background-size: 200% auto;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            animation: shimmer 3s linear infinite;
+          }
+          @keyframes shimmer { to { background-position: 200% center; } }
+          
+          @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+          }
+          .animate-float { animation: float 4s ease-in-out infinite; }
+          .animate-float-delayed { animation: float 4s ease-in-out 2s infinite; }
+
+          @keyframes color-pulse {
+            0% { background-color: rgba(255, 107, 0, 0.8); }
+            50% { background-color: rgba(234, 88, 12, 1); box-shadow: 0 0 25px rgba(255, 107, 0, 0.6); }
+            100% { background-color: rgba(255, 107, 0, 0.8); }
+          }
+          .animate-color-pulse { animation: color-pulse 3s infinite; }
+
+          @keyframes gradient-x {
+            0%, 100% { background-size: 200% 200%; background-position: left center; }
+            50% { background-size: 200% 200%; background-position: right center; }
+          }
+          .animate-gradient-x { animation: gradient-x 3s ease infinite; }
+
+          @keyframes pulse-purple-blue {
+            0% { background-position: 0% 50%; box-shadow: 0 0 15px rgba(139, 92, 246, 0.4); }
+            50% { background-position: 100% 50%; box-shadow: 0 0 30px rgba(59, 130, 246, 0.8); }
+            100% { background-position: 0% 50%; box-shadow: 0 0 15px rgba(139, 92, 246, 0.4); }
+          }
+          .animate-pay-online {
+            background: linear-gradient(270deg, #8B5CF6, #3B82F6, #6366F1, #8B5CF6);
+            background-size: 300% 300%;
+            animation: pulse-purple-blue 2.5s ease infinite;
+            border: 1px solid rgba(255,255,255,0.2);
+          }
+
+          @keyframes gradient-bg {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+          .animate-gradient-bg { background-size: 200% 200%; animation: gradient-bg 8s ease infinite; }
+
+          @keyframes spin-border {
+            100% { transform: rotate(360deg); }
+          }
+          .rainbow-glow {
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, #4285f4, #9b72cb, #d96570, #f4b400, #0f9d58, #4285f4);
+            animation: spin-border 3s linear infinite;
+            z-index: 0;
+          }
+
+          @keyframes storm {
+            0% { transform: translate(0%, 0%) rotate(0deg) scale(1); }
+            25% { transform: translate(15%, 15%) rotate(90deg) scale(1.1); }
+            50% { transform: translate(-10%, 20%) rotate(180deg) scale(0.9); }
+            75% { transform: translate(-15%, -10%) rotate(270deg) scale(1.15); }
+            100% { transform: translate(0%, 0%) rotate(360deg) scale(1); }
+          }
+          .animate-storm-1 { animation: storm 20s infinite ease-in-out; }
+          .animate-storm-2 { animation: storm 25s infinite ease-in-out reverse; }
+          .animate-storm-3 { animation: strm 22s infinite ease-in-out alternate; }
+        `}} />
+
+        <ToastContainer toasts={toasts} />
+        <ChatWidget />
+        
+        {currentView !== 'LOGIN' && currentView !== 'SIGNUP' && <Navbar />}
+        
+        <main className="w-full">
+          {currentView === 'HOME' && <HomeView />}
+          {currentView === 'PRODUCT_DETAIL' && <ProductDetailView />}
+          {currentView === 'CART' && <CartView />}
+          {currentView === 'LOGIN' && <LoginView />}
+          {currentView === 'SIGNUP' && <SignupView />}
+          {currentView === 'PROFILE' && <ProfileView />}
+          {currentView === 'ORDERS' && <OrdersView />}
+          {currentView === 'ADMIN_DASHBOARD' && <AdminDashboardView />}
+        </main>
+        
+        {currentView !== 'LOGIN' && currentView !== 'SIGNUP' && currentView !== 'ADMIN_DASHBOARD' && <BottomNav />}
+      </div>
+    </AppContext.Provider>
+  );
+}
